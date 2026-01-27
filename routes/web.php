@@ -86,7 +86,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/books/{bookSlug}/export/markdown', [ExportControllers\BookExportController::class, 'markdown']);
     Route::get('/books/{bookSlug}/export/zip', [ExportControllers\BookExportController::class, 'zip']);
     Route::get('/books/{bookSlug}/export/plaintext', [ExportControllers\BookExportController::class, 'plainText']);
-
+    // Routes quản lý thành viên dự án (Add Member)
+    Route::post('/books/{bookSlug}/member', [EntityControllers\BookController::class, 'addMember']);
+    Route::delete('/books/{bookSlug}/member/{userId}', [EntityControllers\BookController::class, 'removeMember']);
     // Pages
     Route::get('/books/{bookSlug}/create-page', [EntityControllers\PageController::class, 'create']);
     Route::post('/books/{bookSlug}/create-guest-page', [EntityControllers\PageController::class, 'createAsGuest']);
@@ -390,10 +392,9 @@ Route::fallback([MetaController::class, 'notFound'])->name('fallback');
 
 Route::middleware(['web', 'auth'])->group(function () {
     
-    Route::post('/approve-content', function (Request $request) {
-        $id = $request->input('id');
-        $type = $request->input('type'); 
-
+    // --- ROUTE DUYỆT BÀI (Đã sửa lại khớp với URL) ---
+    Route::post('/approve-entity/{type}/{id}', function (Request $request, $type, $id) {
+        
         // 1. Lấy thông tin thực tế từ bảng entities
         $entity = DB::table('entities')->where('id', $id)->where('type', $type)->first();
 
@@ -401,29 +402,24 @@ Route::middleware(['web', 'auth'])->group(function () {
             return back()->with('error', 'Không tìm thấy nội dung!');
         }
 
-        // 2. Tìm chủ sách (Book Owner)
+        // 2. Tìm chủ sách (Book Owner) - Xử lý cả trường hợp duyệt Sách hoặc duyệt Page/Chapter
+        $bookId = ($type === 'book') ? $entity->id : $entity->book_id;
+        
         $bookOwnerId = DB::table('entities')
-            ->where('id', $entity->book_id)
+            ->where('id', $bookId)
             ->where('type', 'book')
             ->value('owned_by');
 
-        // 3. KIỂM TRA QUYỀN (SỬ DỤNG TRUY VẤN TRỰC TIẾP TRÁNH CACHE)
+        // 3. KIỂM TRA QUYỀN
         $user = auth()->user();
         $userId = $user->id;
-
-        // Lấy tất cả Role ID của user này từ bảng trung gian
         $userRoleIds = DB::table('role_user')->where('user_id', $userId)->pluck('role_id')->toArray();
 
-        // ĐIỀU KIỆN DUYỆT:
-        $isAdmin = in_array(1, $userRoleIds); // Admin ID 1
-        $isViceLead = in_array(7, $userRoleIds); // Phó Lead ID 7
-        $isBookOwner = ((int)$userId === (int)$bookOwnerId); // Chủ sách
-        $isSystemAdmin = ($user->email === 'admin@admin.com');
+        $isAdmin = in_array(1, $userRoleIds); // Admin
+        $isBookOwner = ((int)$userId === (int)$bookOwnerId); // Chủ dự án
 
-        // Ghi log để kiểm tra (Xóa sau khi chạy thành công)
-        Log::info("User ID: $userId đang duyệt. Roles: " . implode(',', $userRoleIds) . " | isAdmin: $isAdmin | isViceLead: $isViceLead | isOwner: $isBookOwner");
-
-        if ($isAdmin || $isViceLead || $isBookOwner || $isSystemAdmin) {
+        // Chỉ Admin hoặc Chủ dự án mới được duyệt
+        if ($isAdmin || $isBookOwner) {
             DB::table('duyet_bai')->updateOrInsert(
                 ['entity_id' => $id, 'entity_type' => $type],
                 [
@@ -432,10 +428,9 @@ Route::middleware(['web', 'auth'])->group(function () {
                     'updated_at' => now()
                 ]
             );
-            
             return back()->with('success', 'Đã duyệt thành công!');
         }
 
-        return response("Bạn không có quyền! (Role của bạn: " . implode(',', $userRoleIds) . ")", 403);
+        return response("Bạn không có quyền duyệt bài viết này!", 403);
     });
 });
