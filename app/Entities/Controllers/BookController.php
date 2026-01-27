@@ -1,7 +1,7 @@
 <?php
 
 namespace BookStack\Entities\Controllers;
-
+use Illuminate\Support\Facades\DB;
 use BookStack\Activity\ActivityQueries;
 use BookStack\Activity\ActivityType;
 use BookStack\Activity\Models\View;
@@ -115,6 +115,13 @@ class BookController extends Controller
         }
 
         $book = $this->bookRepo->create($validated);
+          \DB::table('duyet_bai')->insert([
+    'entity_id'   => $book->id,
+    'entity_type' => 'book',
+    'trang_thai'  => 'da_duyet', // Sách/Dự án thì mặc định đã duyệt
+    'user_id'     => auth()->id()
+ 
+]);
 
         if ($bookshelf) {
             $bookshelf->appendBook($book);

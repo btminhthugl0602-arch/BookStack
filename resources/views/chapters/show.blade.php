@@ -1,4 +1,33 @@
 @extends('layouts.tri')
+@php
+    $statusCheck = \DB::table('duyet_bai')
+        ->where('entity_id', $chapter->id)
+        ->where('entity_type', 'chapter')
+        ->first();
+
+    if ($statusCheck && $statusCheck->trang_thai === 'cho_duyet') {
+        $user = auth()->user();
+        $currentId = auth()->id();
+        
+        // Admin System cố định
+        $isAdminSystem = ($user->email === 'adminsystem@admin.com');
+        // Người tạo chương này
+        $isCreator = ($currentId == $chapter->owned_by);
+        // Chủ dự án (Người tạo ra cuốn sách chứa chương này)
+        $bookOwnerId = $chapter->book ? $chapter->book->owned_by : null;
+        $isBookOwner = ($currentId == $bookOwnerId);
+
+        // Chặn nếu không thuộc 3 nhóm trên
+        if (!($isAdminSystem || $isCreator || $isBookOwner)) {
+            echo "<div style='text-align:center; margin-top:100px; font-family:sans-serif;'>
+                    <h1 style='color:#e53e3e;'>🔒 Chương này đang chờ phê duyệt</h1>
+                    <p>Nội dung cần được Chủ dự án hoặc Admin System phê duyệt.</p>
+                    <a href='".url('/')."'>Quay lại trang chủ</a>
+                  </div>";
+            exit;
+        }
+    }
+@endphp
 
 @section('container-attrs')
     component="entity-search"
@@ -22,6 +51,7 @@
     </div>
 
     <main class="content-wrap card">
+        {!! $alertHtml ?? '' !!}
         <h1 class="break-text">{{ $chapter->name }}</h1>
         <div refs="entity-search@contentView" class="chapter-content">
             <div class="text-muted break-text">{!! $chapter->descriptionInfo()->getHtml() !!}</div>

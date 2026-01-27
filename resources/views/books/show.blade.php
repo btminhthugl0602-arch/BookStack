@@ -1,4 +1,21 @@
 @extends('layouts.tri')
+@php
+    $statusCheck = \DB::table('duyet_bai')
+        ->where('entity_id', $book->id)
+        ->where('entity_type', 'book')
+        ->first();
+
+    if ($statusCheck && $statusCheck->trang_thai === 'cho_duyet') {
+        if (!(auth()->user()->hasSystemRole('admin') || auth()->id() == $book->owned_by)) {
+            echo "<div style='text-align:center; margin-top:100px; font-family:sans-serif;'>
+                    <h1 style='color:#e53e3e;'>🔒 Dự án chưa được công khai</h1>
+                    <p>Dự án này đang chờ Leader phê duyệt để các thành viên có thể tham gia.</p>
+                    <a href='".url('/')."'>Quay lại trang chủ</a>
+                  </div>";
+            exit;
+        }
+    }
+@endphp
 
 @section('container-attrs')
     component="entity-search"
