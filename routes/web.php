@@ -29,6 +29,7 @@ Route::get('/manifest.json', [MetaController::class, 'pwaManifest']);
 Route::get('/licenses', [MetaController::class, 'licenses']);
 Route::get('/opensearch.xml', [MetaController::class, 'opensearch']);
 
+
 // Authenticated routes...
 Route::middleware('auth')->group(function () {
 
@@ -382,3 +383,6 @@ Route::get('/theme/{theme}/{path}', [ThemeController::class, 'publicFile'])
     ->where('path', '.*$');
 
 Route::fallback([MetaController::class, 'notFound'])->name('fallback');
+
+// --- Route cho Dev 1: AI Summarize ---
+Route::get('/ajax/page/{id}/ai-summarize', [BookStack\Http\Controllers\AiController::class, 'summarize']);
