@@ -2,6 +2,7 @@
 
 namespace BookStack\Entities\Models;
 
+use BookStack\Entities\Traits\HasApprovalWorkflow; 
 use BookStack\Activity\Models\Activity;
 use BookStack\Activity\Models\Comment;
 use BookStack\Activity\Models\Favouritable;
@@ -61,8 +62,13 @@ abstract class Entity extends Model implements
     Loggable
 {
     use SoftDeletes;
+    use HasApprovalWorkflow;
     use HasCreatorAndUpdater;
-
+    protected static function booted(): void
+    {
+        // Kích hoạt Scope lọc bài duyệt (Kính lọc bảo mật)
+        static::addGlobalScope(new \BookStack\Scopes\ApprovalScope);
+    }
     /**
      * @var string - Name of property where the main text content is found
      */
