@@ -86,4 +86,39 @@
             ])
         @endif
     @endif
+{{-- PHẦN KIỂM TRA DUYỆT BÀI CHI TIẾT --}}
+@php
+    $checkDuyet = \DB::table('duyet_bai')
+        ->where('entity_id', $entity->id)
+        ->where('entity_type', $entity->getType())
+        ->first();
+    
+    $trangThai = $checkDuyet ? $checkDuyet->trang_thai : 'da_duyet';
+    $user = auth()->user();
+    $currentUserId = auth()->id();
+    
+    // Tìm ID chủ dự án (Người tạo ra cuốn sách)
+    $bookOwnerId = ($entity->isA('book')) ? $entity->owned_by : ($entity->book ? $entity->book->owned_by : null);
+
+    $canApprove = false;
+    if ($trangThai === 'cho_duyet') {
+        // 1. Admin System luôn thấy nút duyệt
+        if ($user->email === 'adminsystem@admin.com') {
+            $canApprove = true;
+        } 
+        // 2. Chủ dự án được duyệt bài người khác, nhưng KHÔNG ĐƯỢC tự duyệt bài mình
+        elseif ($currentUserId == $bookOwnerId && $currentUserId != $entity->owned_by) {
+            $canApprove = true;
+        }
+    }
+@endphp
+
+@if($canApprove)
+    <div style="margin-top: 15px; background: #d4edda; padding: 15px; border: 1px solid #c3e6cb;">
+        <form action="{{ url('/approve-entity/' . $entity->getType() . '/' . $entity->id) }}" method="POST">
+            @csrf
+            <button type="submit" class="button" style="background-color: #28a745;">PHÊ DUYỆT NGAY</button>
+        </form>
+    </div>
+@endif
 </div>

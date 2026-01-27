@@ -1,7 +1,9 @@
 <?php
 
 namespace BookStack\Entities\Controllers;
-
+use Illuminate\Support\Facades\DB;
+use BookStack\Activity\Models\View as ActivityView;
+use Illuminate\Support\Facades\Log;
 use BookStack\Activity\Models\View;
 use BookStack\Activity\Tools\CommentTree;
 use BookStack\Activity\Tools\UserEntityWatchOptions;
@@ -22,10 +24,7 @@ use BookStack\Http\Controller;
 use BookStack\Permissions\Permission;
 use BookStack\References\ReferenceFetcher;
 use Exception;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
-use Throwable;
 
 class PageController extends Controller
 {
@@ -38,430 +37,203 @@ class PageController extends Controller
     }
 
     /**
-     * Show the form for creating a new page.
-     *
-     * @throws Throwable
-     */
-    public function create(string $bookSlug, ?string $chapterSlug = null)
-    {
-        if ($chapterSlug) {
-            $parent = $this->entityQueries->chapters->findVisibleBySlugsOrFail($bookSlug, $chapterSlug);
-        } else {
-            $parent = $this->entityQueries->books->findVisibleBySlugOrFail($bookSlug);
-        }
-
-        $this->checkOwnablePermission(Permission::PageCreate, $parent);
-
-        // Redirect to draft edit screen if signed in
-        if ($this->isSignedIn()) {
-            $draft = $this->pageRepo->getNewDraftPage($parent);
-
-            return redirect($draft->getUrl());
-        }
-
-        // Otherwise show the edit view if they're a guest
-        $this->setPageTitle(trans('entities.pages_new'));
-
-        return view('pages.guest-create', ['parent' => $parent]);
-    }
-
-    /**
-     * Create a new page as a guest user.
-     *
-     * @throws ValidationException
-     */
-    public function createAsGuest(Request $request, string $bookSlug, ?string $chapterSlug = null)
-    {
-        $this->validate($request, [
-            'name' => ['required', 'string', 'max:255'],
-        ]);
-
-        if ($chapterSlug) {
-            $parent = $this->entityQueries->chapters->findVisibleBySlugsOrFail($bookSlug, $chapterSlug);
-        } else {
-            $parent = $this->entityQueries->books->findVisibleBySlugOrFail($bookSlug);
-        }
-
-        $this->checkOwnablePermission(Permission::PageCreate, $parent);
-
-        $page = $this->pageRepo->getNewDraftPage($parent);
-        $this->pageRepo->publishDraft($page, [
-            'name' => $request->get('name'),
-        ]);
-
-        return redirect($page->getUrl('/edit'));
-    }
-
-    /**
-     * Show form to continue editing a draft page.
-     *
-     * @throws NotFoundException
+     * FIX LỖI HÌNH 2: Hiển thị trình soạn thảo bản nháp
      */
     public function editDraft(Request $request, string $bookSlug, int $pageId)
     {
         $draft = $this->queries->findVisibleByIdOrFail($pageId);
-        $this->checkOwnablePermission(Permission::PageCreate, $draft->getParent());
+        $this->checkOwnablePermission(Permission::PageUpdate, $draft);
 
         $editorData = new PageEditorData($draft, $this->entityQueries, $request->query('editor', ''));
-        $this->setPageTitle(trans('entities.pages_edit_draft'));
+        $this->setPageTitle(trans('entities.pages_editing_draft'));
 
         return view('pages.edit', $editorData->getViewData());
     }
 
     /**
-     * Store a new page by changing a draft into a page.
-     *
-     * @throws NotFoundException
-     * @throws ValidationException
+     * Lưu trang mới và đưa vào danh sách chờ duyệt
      */
-    public function store(Request $request, string $bookSlug, int $pageId)
-    {
-        $this->validate($request, [
-            'name' => ['required', 'string', 'max:255'],
-        ]);
+ public function store(Request $request, string $bookSlug, int $pageId)
+{
+    $this->validate($request, ['name' => ['required', 'string', 'max:255']]);
+    $draftPage = $this->queries->findVisibleByIdOrFail($pageId);
+    
+    // Lưu trang chính thức
+    $page = $this->pageRepo->publishDraft($draftPage, $request->all());
 
-        $draftPage = $this->queries->findVisibleByIdOrFail($pageId);
-        $this->checkOwnablePermission(Permission::PageCreate, $draftPage->getParent());
+    // --- LOGIC PHÂN QUYỀN DUYỆT TỰ ĐỘNG ---
+    $user = auth()->user();
+    $bookOwnerId = (int)$page->book->owned_by;
+    $currentUserId = (int)$user->id;
 
-        $page = $this->pageRepo->publishDraft($draftPage, $request->all());
+    // Kiểm tra các cấp bậc: Admin hoặc Chủ sách hoặc Phó Lead
+    $isAdmin = $user->hasSystemRole('admin') || $user->email === 'admin@admin.com';
+    $isOwner = ($currentUserId === $bookOwnerId);
+    $isViceLead = $user->roles()->where('display_name', 'Phó Lead')->exists();
 
-        return redirect($page->getUrl());
-    }
+    // Nếu thuộc nhóm quyền lực -> Duyệt luôn
+    $status = ($isAdmin || $isOwner || $isViceLead) ? 'da_duyet' : 'cho_duyet';
+
+    DB::table('duyet_bai')->updateOrInsert(
+        ['entity_id' => $page->id, 'entity_type' => 'page'],
+        [
+            'trang_thai' => $status,
+            'user_id'    => $currentUserId
+           
+        ]
+    );
+
+    return redirect($page->getUrl());
+}
 
     /**
-     * Display the specified page.
-     * If the page is not found via the slug the revisions are searched for a match.
-     *
-     * @throws NotFoundException
-     */
-    public function show(string $bookSlug, string $pageSlug)
-    {
-        try {
-            $page = $this->queries->findVisibleBySlugsOrFail($bookSlug, $pageSlug);
-        } catch (NotFoundException $e) {
-            $page = $this->entityQueries->findVisibleByOldSlugs('page', $pageSlug, $bookSlug);
-            if (is_null($page)) {
-                throw $e;
-            }
-
-            return redirect($page->getUrl());
-        }
-
-        $pageContent = (new PageContent($page));
-        $page->html = $pageContent->render();
-        $pageNav = $pageContent->getNavigation($page->html);
-
-        $sidebarTree = (new BookContents($page->book))->getTree();
-        $commentTree = (new CommentTree($page));
-        $nextPreviousLocator = new NextPreviousContentLocator($page, $sidebarTree);
-
-        View::incrementFor($page);
-        $this->setPageTitle($page->getShortName());
-
-        return view('pages.show', [
-            'page'            => $page,
-            'book'            => $page->book,
-            'current'         => $page,
-            'sidebarTree'     => $sidebarTree,
-            'commentTree'     => $commentTree,
-            'pageNav'         => $pageNav,
-            'watchOptions'    => new UserEntityWatchOptions(user(), $page),
-            'next'            => $nextPreviousLocator->getNext(),
-            'previous'        => $nextPreviousLocator->getPrevious(),
-            'referenceCount'  => $this->referenceFetcher->getReferenceCountToEntity($page),
-        ]);
-    }
-
-    /**
-     * Get page from an ajax request.
-     *
-     * @throws NotFoundException
-     */
-    public function getPageAjax(int $pageId)
-    {
-        $page = $this->queries->findVisibleByIdOrFail($pageId);
-        $page->setHidden(array_diff($page->getHidden(), ['html', 'markdown']));
-        $page->makeHidden(['book']);
-
-        return response()->json($page);
-    }
-
-    /**
-     * Show the form for editing the specified page.
-     *
-     * @throws NotFoundException
-     */
-    public function edit(Request $request, string $bookSlug, string $pageSlug)
-    {
-        $page = $this->queries->findVisibleBySlugsOrFail($bookSlug, $pageSlug);
-        $this->checkOwnablePermission(Permission::PageUpdate, $page, $page->getUrl());
-
-        $editorData = new PageEditorData($page, $this->entityQueries, $request->query('editor', ''));
-        if ($editorData->getWarnings()) {
-            $this->showWarningNotification(implode("\n", $editorData->getWarnings()));
-        }
-
-        $this->setPageTitle(trans('entities.pages_editing_named', ['pageName' => $page->getShortName()]));
-
-        return view('pages.edit', $editorData->getViewData());
-    }
-
-    /**
-     * Update the specified page in storage.
-     *
-     * @throws ValidationException
-     * @throws NotFoundException
+     * Cập nhật trang và đưa về trạng thái chờ duyệt
      */
     public function update(Request $request, string $bookSlug, string $pageSlug)
-    {
-        $this->validate($request, [
-            'name' => ['required', 'string', 'max:255'],
-        ]);
-        $page = $this->queries->findVisibleBySlugsOrFail($bookSlug, $pageSlug);
-        $this->checkOwnablePermission(Permission::PageUpdate, $page);
+{
+    $this->validate($request, ['name' => ['required', 'string', 'max:255']]);
+    $page = $this->queries->findVisibleBySlugsOrFail($bookSlug, $pageSlug);
+    $this->checkOwnablePermission(Permission::PageUpdate, $page);
 
-        $this->pageRepo->update($page, $request->all());
+    $this->pageRepo->update($page, $request->all());
 
-        return redirect($page->getUrl());
-    }
+    $isBookOwner = auth()->id() == $page->book->owned_by;
+    $trangThai = $isBookOwner ? 'da_duyet' : 'cho_duyet';
+
+    DB::table('duyet_bai')->updateOrInsert(
+        ['entity_id' => $page->id, 'entity_type' => 'page'],
+        ['trang_thai' => $trangThai, 'user_id' => auth()->id()]
+    );
+
+    return redirect($page->getUrl());
+}
 
     /**
-     * Save a draft update as a revision.
-     *
-     * @throws NotFoundException
+     * Hiển thị nội dung trang (Có kiểm tra trạng thái duyệt)
      */
-    public function saveDraft(Request $request, int $pageId)
-    {
-        $page = $this->queries->findVisibleByIdOrFail($pageId);
-        $this->checkOwnablePermission(Permission::PageUpdate, $page);
+   public function show(string $bookSlug, string $pageSlug)
+{
+    $page = $this->queries->findVisibleBySlugsOrFail($bookSlug, $pageSlug);
+    
+    // 1. KIỂM TRA TRẠNG THÁI DUYỆT
+    $statusCheck = DB::table('duyet_bai')
+        ->where('entity_id', $page->id)
+        ->where('entity_type', 'page')
+        ->first();
+    $status = $statusCheck ? $statusCheck->trang_thai : 'cho_duyet';
 
-        if (!$this->isSignedIn()) {
-            return $this->jsonError(trans('errors.guests_cannot_save_drafts'), 500);
+    // 2. XÁC ĐỊNH QUYỀN
+    $user = auth()->user();
+    $isAdmin = $user && ($user->hasSystemRole('admin') || $user->email === 'admin@admin.com');
+    $isBookOwner = $user && ((int)$user->id === (int)$page->book->owned_by);
+    $isViceLead = $user && $user->roles()->where('display_name', 'Phó Lead')->exists();
+    $isAuthor = $user && ((int)$user->id === (int)$page->created_by);
+
+    $alertHtml = "";
+
+    if ($status === 'cho_duyet') {
+        if ($isAdmin || $isBookOwner || $isViceLead) {
+            // Hiển thị nút duyệt cho cấp quản lý
+            $alertHtml = "
+            <div style='background:#fff3cd; color:#856404; padding:15px; border:1px solid #ffeeba; margin-bottom:20px; border-radius:4px; display:flex; justify-content:space-between; align-items:center;'>
+                <span>⚠️ <b>Thông báo:</b> Trang này đang chờ bạn duyệt.</span>
+                <form action='".url('/approve-content')."' method='POST' style='margin:0;'>
+                    <input type='hidden' name='_token' value='".csrf_token()."'>
+                    <input type='hidden' name='id' value='".$page->id."'>
+                    <input type='hidden' name='type' value='page'>
+                    <button type='submit' style='background:#28a745; color:white; border:none; padding:7px 15px; border-radius:4px; cursor:pointer; font-weight:bold;'>✅ DUYỆT BÀI</button>
+                </form>
+            </div>";
+        } elseif ($isAuthor) {
+            // Thông báo cho tác giả
+            $alertHtml = "<div style='background:#d1ecf1; color:#0c5460; padding:15px; border:1px solid #bee5eb; margin-bottom:20px; border-radius:4px;'>ℹ️ Bài viết của bạn đang chờ Leader phê duyệt.</div>";
+        } else {
+            // Người khác: Hiện màn hình khóa
+            return response($this->getLockScreenHtml($page->name), 403)->header('Content-Type', 'text/html');
+        }
+    }
+
+    // 3. RENDER NỘI DUNG (Nếu vượt qua các bước kiểm tra trên)
+    $pageContent = (new PageContent($page));
+    
+    // Chèn thông báo duyệt vào đầu nội dung trang
+    $page->html = $alertHtml . $pageContent->render();
+    
+    $sidebarTree = (new BookContents($page->book))->getTree();
+    $commentTree = (new CommentTree($page));
+    $nextPreviousLocator = new NextPreviousContentLocator($page, $sidebarTree);
+
+    // Sử dụng ActivityView (Alias đã đặt ở đầu file) để tránh lỗi
+    ActivityView::incrementFor($page);
+    $this->setPageTitle($page->getShortName());
+
+    return view('pages.show', [
+        'page'            => $page,
+        'book'            => $page->book,
+        'current'         => $page,
+        'sidebarTree'     => $sidebarTree,
+        'commentTree'     => $commentTree,
+        'pageNav'         => $pageContent->getNavigation($page->html),
+        'watchOptions'    => new UserEntityWatchOptions(user(), $page),
+        'next'            => $nextPreviousLocator->getNext(),
+        'previous'        => $nextPreviousLocator->getPrevious(),
+        'referenceCount'  => $this->referenceFetcher->getReferenceCountToEntity($page),
+    ]);
+}
+
+// Hàm bổ trợ màn hình khóa (Nên để riêng cho code sạch)
+private function getLockScreenHtml($name) {
+    return "
+    <div style='display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; background-color: #f7fafc;'>
+        <div style='text-align: center; padding: 40px; background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 500px;'>
+            <div style='font-size: 60px; margin-bottom: 20px;'>🔒</div>
+            <h1 style='color: #e53e3e; margin-bottom: 10px; font-size: 24px;'>Nội dung đang chờ phê duyệt</h1>
+            <p style='color: #4a5568;'>Trang <strong>\"$name\"</strong> hiện đang chờ kiểm duyệt nội dung.</p>
+            <a href='".url('/')."' style='display: inline-block; margin-top: 20px; padding: 10px 20px; background-color: #448aff; color: white; text-decoration: none; border-radius: 4px;'>Quay lại trang chủ</a>
+        </div>
+    </div>";
+}
+
+    /**
+     * Khởi tạo tạo trang mới (Draft)
+     */
+    public function create(string $bookSlug, ?string $chapterSlug = null)
+    {
+        $parent = $chapterSlug 
+            ? $this->entityQueries->chapters->findVisibleBySlugsOrFail($bookSlug, $chapterSlug) 
+            : $this->entityQueries->books->findVisibleBySlugOrFail($bookSlug);
+
+        $this->checkOwnablePermission(Permission::PageCreate, $parent);
+
+        if ($this->isSignedIn()) {
+            $draft = $this->pageRepo->getNewDraftPage($parent);
+            return redirect($draft->getUrl());
         }
 
-        $draft = $this->pageRepo->updatePageDraft($page, $request->only(['name', 'html', 'markdown']));
-        $warnings = (new PageEditActivity($page))->getWarningMessagesForDraft($draft);
-
-        return response()->json([
-            'status'    => 'success',
-            'message'   => trans('entities.pages_edit_draft_save_at'),
-            'warning'   => implode("\n", $warnings),
-            'timestamp' => $draft->updated_at->timestamp,
-        ]);
+        return view('pages.guest-create', ['parent' => $parent]);
     }
 
-    /**
-     * Redirect from a special link url which uses the page id rather than the name.
-     *
-     * @throws NotFoundException
-     */
-    public function redirectFromLink(int $pageId)
-    {
-        $page = $this->queries->findVisibleByIdOrFail($pageId);
-
-        return redirect($page->getUrl());
+    // --- Các phương thức bổ sung để tránh lỗi thiếu hàm ---
+    public function edit(Request $request, string $bookSlug, string $pageSlug) {
+        $page = $this->queries->findVisibleBySlugsOrFail($bookSlug, $pageSlug);
+        $editorData = new PageEditorData($page, $this->entityQueries, $request->query('editor', ''));
+        return view('pages.edit', $editorData->getViewData());
     }
 
-    /**
-     * Show the deletion page for the specified page.
-     *
-     * @throws NotFoundException
-     */
-    public function showDelete(string $bookSlug, string $pageSlug)
-    {
+    public function destroy(string $bookSlug, string $pageSlug) {
         $page = $this->queries->findVisibleBySlugsOrFail($bookSlug, $pageSlug);
         $this->checkOwnablePermission(Permission::PageDelete, $page);
-        $this->setPageTitle(trans('entities.pages_delete_named', ['pageName' => $page->getShortName()]));
-        $usedAsTemplate =
-            $this->entityQueries->books->start()->where('default_template_id', '=', $page->id)->count() > 0 ||
-            $this->entityQueries->chapters->start()->where('default_template_id', '=', $page->id)->count() > 0;
-
-        return view('pages.delete', [
-            'book'    => $page->book,
-            'page'    => $page,
-            'current' => $page,
-            'usedAsTemplate' => $usedAsTemplate,
-        ]);
-    }
-
-    /**
-     * Show the deletion page for the specified page.
-     *
-     * @throws NotFoundException
-     */
-    public function showDeleteDraft(string $bookSlug, int $pageId)
-    {
-        $page = $this->queries->findVisibleByIdOrFail($pageId);
-        $this->checkOwnablePermission(Permission::PageUpdate, $page);
-        $this->setPageTitle(trans('entities.pages_delete_draft_named', ['pageName' => $page->getShortName()]));
-        $usedAsTemplate =
-            $this->entityQueries->books->start()->where('default_template_id', '=', $page->id)->count() > 0 ||
-            $this->entityQueries->chapters->start()->where('default_template_id', '=', $page->id)->count() > 0;
-
-        return view('pages.delete', [
-            'book'    => $page->book,
-            'page'    => $page,
-            'current' => $page,
-            'usedAsTemplate' => $usedAsTemplate,
-        ]);
-    }
-
-    /**
-     * Remove the specified page from storage.
-     *
-     * @throws NotFoundException
-     * @throws Throwable
-     */
-    public function destroy(string $bookSlug, string $pageSlug)
-    {
-        $page = $this->queries->findVisibleBySlugsOrFail($bookSlug, $pageSlug);
-        $this->checkOwnablePermission(Permission::PageDelete, $page);
-        $parent = $page->getParent();
-
+        $parent = $page->getParent(); 
         $this->pageRepo->destroy($page);
-
+        DB::table('duyet_bai')->where('entity_id', $page->id)->where('entity_type', 'page')->delete();
         return redirect($parent->getUrl());
     }
 
-    /**
-     * Remove the specified draft page from storage.
-     *
-     * @throws NotFoundException
-     * @throws Throwable
-     */
-    public function destroyDraft(string $bookSlug, int $pageId)
-    {
-        $page = $this->queries->findVisibleByIdOrFail($pageId);
-        $book = $page->book;
-        $chapter = $page->chapter;
-        $this->checkOwnablePermission(Permission::PageUpdate, $page);
-
-        $this->pageRepo->destroy($page);
-
-        $this->showSuccessNotification(trans('entities.pages_delete_draft_success'));
-
-        if ($chapter && userCan(Permission::ChapterView, $chapter)) {
-            return redirect($chapter->getUrl());
-        }
-
-        return redirect($book->getUrl());
-    }
-
-    /**
-     * Show a listing of recently created pages.
-     */
-    public function showRecentlyUpdated()
-    {
-        $visibleBelongsScope = function (BelongsTo $query) {
-            $query->scopes('visible');
-        };
-
-        $pages = $this->queries->visibleForList()
-            ->addSelect('updated_by')
-            ->with(['updatedBy', 'book' => $visibleBelongsScope, 'chapter' => $visibleBelongsScope])
-            ->orderBy('updated_at', 'desc')
-            ->paginate(20)
-            ->setPath(url('/pages/recently-updated'));
-
-        $this->setPageTitle(trans('entities.recently_updated_pages'));
-
-        return view('common.detailed-listing-paginated', [
-            'title'         => trans('entities.recently_updated_pages'),
-            'entities'      => $pages,
-            'showUpdatedBy' => true,
-            'showPath'      => true,
-        ]);
-    }
-
-    /**
-     * Show the view to choose a new parent to move a page into.
-     *
-     * @throws NotFoundException
-     */
-    public function showMove(string $bookSlug, string $pageSlug)
-    {
+    public function copy(Request $request, Cloner $cloner, string $bookSlug, string $pageSlug) {
         $page = $this->queries->findVisibleBySlugsOrFail($bookSlug, $pageSlug);
-        $this->checkOwnablePermission(Permission::PageUpdate, $page);
-        $this->checkOwnablePermission(Permission::PageDelete, $page);
-
-        return view('pages.move', [
-            'book' => $page->book,
-            'page' => $page,
-        ]);
-    }
-
-    /**
-     * Does the action of moving the location of a page.
-     *
-     * @throws NotFoundException
-     * @throws Throwable
-     */
-    public function move(Request $request, string $bookSlug, string $pageSlug)
-    {
-        $page = $this->queries->findVisibleBySlugsOrFail($bookSlug, $pageSlug);
-        $this->checkOwnablePermission(Permission::PageUpdate, $page);
-        $this->checkOwnablePermission(Permission::PageDelete, $page);
-
-        $entitySelection = $request->get('entity_selection', null);
-        if ($entitySelection === null || $entitySelection === '') {
-            return redirect($page->getUrl());
-        }
-
-        try {
-            $this->pageRepo->move($page, $entitySelection);
-        } catch (PermissionsException $exception) {
-            $this->showPermissionError();
-        } catch (Exception $exception) {
-            $this->showErrorNotification(trans('errors.selected_book_chapter_not_found'));
-
-            return redirect($page->getUrl('/move'));
-        }
-
-        return redirect($page->getUrl());
-    }
-
-    /**
-     * Show the view to copy a page.
-     *
-     * @throws NotFoundException
-     */
-    public function showCopy(string $bookSlug, string $pageSlug)
-    {
-        $page = $this->queries->findVisibleBySlugsOrFail($bookSlug, $pageSlug);
-        session()->flashInput(['name' => $page->name]);
-
-        return view('pages.copy', [
-            'book' => $page->book,
-            'page' => $page,
-        ]);
-    }
-
-    /**
-     * Create a copy of a page within the requested target destination.
-     *
-     * @throws NotFoundException
-     * @throws Throwable
-     */
-    public function copy(Request $request, Cloner $cloner, string $bookSlug, string $pageSlug)
-    {
-        $page = $this->queries->findVisibleBySlugsOrFail($bookSlug, $pageSlug);
-        $this->checkOwnablePermission(Permission::PageView, $page);
-
-        $entitySelection = $request->get('entity_selection') ?: null;
-        $newParent = $entitySelection ? $this->entityQueries->findVisibleByStringIdentifier($entitySelection) : $page->getParent();
-
-        if (!$newParent instanceof Book && !$newParent instanceof Chapter) {
-            $this->showErrorNotification(trans('errors.selected_book_chapter_not_found'));
-
-            return redirect($page->getUrl('/copy'));
-        }
-
-        $this->checkOwnablePermission(Permission::PageCreate, $newParent);
-
-        $newName = $request->get('name') ?: $page->name;
-        $pageCopy = $cloner->clonePage($page, $newParent, $newName);
-        $this->showSuccessNotification(trans('entities.pages_copy_success'));
-
+        $newParent = $page->getParent();
+        $pageCopy = $cloner->clonePage($page, $newParent, $request->get('name') ?: $page->name);
+        DB::table('duyet_bai')->insert(['entity_id' => $pageCopy->id, 'entity_type' => 'page', 'trang_thai' => 'cho_duyet', 'user_id' => auth()->id()]);
         return redirect($pageCopy->getUrl());
     }
 }

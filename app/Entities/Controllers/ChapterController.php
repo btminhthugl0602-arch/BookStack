@@ -2,27 +2,24 @@
 
 namespace BookStack\Entities\Controllers;
 
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use BookStack\Activity\Models\View;
 use BookStack\Activity\Tools\UserEntityWatchOptions;
 use BookStack\Entities\Models\Book;
 use BookStack\Entities\Queries\ChapterQueries;
 use BookStack\Entities\Queries\EntityQueries;
 use BookStack\Entities\Repos\ChapterRepo;
+use BookStack\Entities\Tools\PageContent;
 use BookStack\Entities\Tools\BookContents;
 use BookStack\Entities\Tools\Cloner;
 use BookStack\Entities\Tools\HierarchyTransformer;
 use BookStack\Entities\Tools\NextPreviousContentLocator;
-use BookStack\Exceptions\MoveOperationException;
 use BookStack\Exceptions\NotFoundException;
-use BookStack\Exceptions\NotifyException;
-use BookStack\Exceptions\PermissionsException;
 use BookStack\Http\Controller;
 use BookStack\Permissions\Permission;
 use BookStack\References\ReferenceFetcher;
-use BookStack\Util\DatabaseTransaction;
 use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
-use Throwable;
 
 class ChapterController extends Controller
 {
@@ -34,252 +31,150 @@ class ChapterController extends Controller
     ) {
     }
 
-    /**
-     * Show the form for creating a new chapter.
-     */
-    public function create(string $bookSlug)
-    {
-        $book = $this->entityQueries->books->findVisibleBySlugOrFail($bookSlug);
-        $this->checkOwnablePermission(Permission::ChapterCreate, $book);
+  public function store(Request $request, string $bookSlug)
+{
+    
+    $validated = $this->validate($request, ['name' => ['required', 'string', 'max:255']]);
+    $book = $this->entityQueries->books->findVisibleBySlugOrFail($bookSlug);
+    
+    $chapter = $this->chapterRepo->create($validated, $book);
 
-        $this->setPageTitle(trans('entities.chapters_create'));
+    // --- LOGIC PHÂN QUYỀN DUYỆT TỰ ĐỘNG ---
+    $user = auth()->user();
+    $currentUserId = (int)$user->id;
+    $bookOwnerId = (int)$book->owned_by;
 
-        return view('chapters.create', [
-            'book' => $book,
-            'current' => $book,
-        ]);
-    }
+    $isAdmin = $user->hasSystemRole('admin') || $user->email === 'admin@admin.com';
+    $isOwner = ($currentUserId === $bookOwnerId);
+    $isViceLead = $user->roles()->where('display_name', 'Phó Lead')->exists();
 
-    /**
-     * Store a newly created chapter in storage.
-     *
-     * @throws ValidationException
-     */
-    public function store(Request $request, string $bookSlug)
-    {
-        $validated = $this->validate($request, [
-            'name'                => ['required', 'string', 'max:255'],
-            'description_html'    => ['string', 'max:2000'],
-            'tags'                => ['array'],
-            'default_template_id' => ['nullable', 'integer'],
-        ]);
+    $status = ($isAdmin || $isOwner || $isViceLead) ? 'da_duyet' : 'cho_duyet';
 
-        $book = $this->entityQueries->books->findVisibleBySlugOrFail($bookSlug);
-        $this->checkOwnablePermission(Permission::ChapterCreate, $book);
+    DB::table('duyet_bai')->updateOrInsert(
+        ['entity_id' => $chapter->id, 'entity_type' => 'chapter'],
+        [
+            'trang_thai' => $status,
+            'user_id'    => $currentUserId
+           
+        ]
+    );
 
-        $chapter = $this->chapterRepo->create($validated, $book);
+    return redirect($chapter->getUrl());
+}
 
-        return redirect($chapter->getUrl());
-    }
-
-    /**
-     * Display the specified chapter.
-     */
-    public function show(string $bookSlug, string $chapterSlug)
-    {
-        try {
-            $chapter = $this->queries->findVisibleBySlugsOrFail($bookSlug, $chapterSlug);
-        } catch (NotFoundException $exception) {
-            $chapter = $this->entityQueries->findVisibleByOldSlugs('chapter', $chapterSlug, $bookSlug);
-            if (is_null($chapter)) {
-                throw $exception;
-            }
-            return redirect($chapter->getUrl());
-        }
-
-        $sidebarTree = (new BookContents($chapter->book))->getTree();
-        $pages = $this->entityQueries->pages->visibleForChapterList($chapter->id)->get();
-
-        $nextPreviousLocator = new NextPreviousContentLocator($chapter, $sidebarTree);
-        View::incrementFor($chapter);
-
-        $this->setPageTitle($chapter->getShortName());
-
-        return view('chapters.show', [
-            'book'           => $chapter->book,
-            'chapter'        => $chapter,
-            'current'        => $chapter,
-            'sidebarTree'    => $sidebarTree,
-            'watchOptions'   => new UserEntityWatchOptions(user(), $chapter),
-            'pages'          => $pages,
-            'next'           => $nextPreviousLocator->getNext(),
-            'previous'       => $nextPreviousLocator->getPrevious(),
-            'referenceCount' => $this->referenceFetcher->getReferenceCountToEntity($chapter),
-        ]);
-    }
-
-    /**
-     * Show the form for editing the specified chapter.
-     */
-    public function edit(string $bookSlug, string $chapterSlug)
-    {
-        $chapter = $this->queries->findVisibleBySlugsOrFail($bookSlug, $chapterSlug);
-        $this->checkOwnablePermission(Permission::ChapterUpdate, $chapter);
-
-        $this->setPageTitle(trans('entities.chapters_edit_named', ['chapterName' => $chapter->getShortName()]));
-
-        return view('chapters.edit', ['book' => $chapter->book, 'chapter' => $chapter, 'current' => $chapter]);
-    }
-
-    /**
-     * Update the specified chapter in storage.
-     *
-     * @throws NotFoundException
-     */
+    // Cập nhật Chapter
     public function update(Request $request, string $bookSlug, string $chapterSlug)
-    {
-        $validated = $this->validate($request, [
-            'name'                => ['required', 'string', 'max:255'],
-            'description_html'    => ['string', 'max:2000'],
-            'tags'                => ['array'],
-            'default_template_id' => ['nullable', 'integer'],
-        ]);
+{
+    $validated = $this->validate($request, ['name' => ['required', 'string', 'max:255']]);
+    $chapter = $this->queries->findVisibleBySlugsOrFail($bookSlug, $chapterSlug);
+    $this->checkOwnablePermission(Permission::ChapterUpdate, $chapter);
 
-        $chapter = $this->queries->findVisibleBySlugsOrFail($bookSlug, $chapterSlug);
-        $this->checkOwnablePermission(Permission::ChapterUpdate, $chapter);
+    $chapter = $this->chapterRepo->update($chapter, $validated);
 
-        $chapter = $this->chapterRepo->update($chapter, $validated);
+    $user = auth()->user();
+    $isAdmin = $user->hasSystemRole('admin');
+    $isOwner = ((int)$user->id === (int)$chapter->book->owned_by);
+    $isViceLead = $user->roles()->where('display_name', 'Phó Lead')->exists();
 
-        return redirect($chapter->getUrl());
-    }
+    $trangThai = ($isAdmin || $isOwner || $isViceLead) ? 'da_duyet' : 'cho_duyet';
 
-    /**
-     * Shows the page to confirm deletion of this chapter.
-     *
-     * @throws NotFoundException
-     */
-    public function showDelete(string $bookSlug, string $chapterSlug)
-    {
-        $chapter = $this->queries->findVisibleBySlugsOrFail($bookSlug, $chapterSlug);
-        $this->checkOwnablePermission(Permission::ChapterDelete, $chapter);
+    DB::table('duyet_bai')->updateOrInsert(
+        ['entity_id' => $chapter->id, 'entity_type' => 'chapter'],
+        ['trang_thai' => $trangThai, 'user_id' => auth()->id()]
+    );
 
-        $this->setPageTitle(trans('entities.chapters_delete_named', ['chapterName' => $chapter->getShortName()]));
-
-        return view('chapters.delete', ['book' => $chapter->book, 'chapter' => $chapter, 'current' => $chapter]);
-    }
-
-    /**
-     * Remove the specified chapter from storage.
-     *
-     * @throws NotFoundException
-     * @throws Throwable
-     */
-    public function destroy(string $bookSlug, string $chapterSlug)
-    {
-        $chapter = $this->queries->findVisibleBySlugsOrFail($bookSlug, $chapterSlug);
-        $this->checkOwnablePermission(Permission::ChapterDelete, $chapter);
-
-        $this->chapterRepo->destroy($chapter);
-
-        return redirect($chapter->book->getUrl());
-    }
-
-    /**
-     * Show the page for moving a chapter.
-     *
-     * @throws NotFoundException
-     */
-    public function showMove(string $bookSlug, string $chapterSlug)
-    {
-        $chapter = $this->queries->findVisibleBySlugsOrFail($bookSlug, $chapterSlug);
-        $this->setPageTitle(trans('entities.chapters_move_named', ['chapterName' => $chapter->getShortName()]));
-        $this->checkOwnablePermission(Permission::ChapterUpdate, $chapter);
-        $this->checkOwnablePermission(Permission::ChapterDelete, $chapter);
-
-        return view('chapters.move', [
-            'chapter' => $chapter,
-            'book'    => $chapter->book,
-        ]);
-    }
-
-    /**
-     * Perform the move action for a chapter.
-     *
-     * @throws NotFoundException|NotifyException
-     */
-    public function move(Request $request, string $bookSlug, string $chapterSlug)
-    {
-        $chapter = $this->queries->findVisibleBySlugsOrFail($bookSlug, $chapterSlug);
-        $this->checkOwnablePermission(Permission::ChapterUpdate, $chapter);
-        $this->checkOwnablePermission(Permission::ChapterDelete, $chapter);
-
-        $entitySelection = $request->get('entity_selection', null);
-        if ($entitySelection === null || $entitySelection === '') {
-            return redirect($chapter->getUrl());
-        }
-
-        try {
-            $this->chapterRepo->move($chapter, $entitySelection);
-        } catch (PermissionsException $exception) {
-            $this->showPermissionError();
-        } catch (MoveOperationException $exception) {
-            $this->showErrorNotification(trans('errors.selected_book_not_found'));
-
-            return redirect($chapter->getUrl('/move'));
-        }
-
-        return redirect($chapter->getUrl());
-    }
-
-    /**
-     * Show the view to copy a chapter.
-     *
-     * @throws NotFoundException
-     */
-    public function showCopy(string $bookSlug, string $chapterSlug)
-    {
-        $chapter = $this->queries->findVisibleBySlugsOrFail($bookSlug, $chapterSlug);
-
-        session()->flashInput(['name' => $chapter->name]);
-
-        return view('chapters.copy', [
-            'book'    => $chapter->book,
-            'chapter' => $chapter,
-        ]);
-    }
-
-    /**
-     * Create a copy of a chapter within the requested target destination.
-     *
-     * @throws NotFoundException
-     * @throws Throwable
-     */
+    return redirect($chapter->getUrl());
+}
+    // Sao chép Chapter
     public function copy(Request $request, Cloner $cloner, string $bookSlug, string $chapterSlug)
     {
         $chapter = $this->queries->findVisibleBySlugsOrFail($bookSlug, $chapterSlug);
-
         $entitySelection = $request->get('entity_selection') ?: null;
         $newParentBook = $entitySelection ? $this->entityQueries->findVisibleByStringIdentifier($entitySelection) : $chapter->getParent();
 
-        if (!$newParentBook instanceof Book) {
-            $this->showErrorNotification(trans('errors.selected_book_not_found'));
-
-            return redirect($chapter->getUrl('/copy'));
-        }
-
         $this->checkOwnablePermission(Permission::ChapterCreate, $newParentBook);
+        $chapterCopy = $cloner->cloneChapter($chapter, $newParentBook, $request->get('name') ?: $chapter->name);
 
-        $newName = $request->get('name') ?: $chapter->name;
-        $chapterCopy = $cloner->cloneChapter($chapter, $newParentBook, $newName);
-        $this->showSuccessNotification(trans('entities.chapters_copy_success'));
+        DB::table('duyet_bai')->updateOrInsert(
+            ['entity_id' => $chapterCopy->id, 'entity_type' => 'chapter'],
+            ['trang_thai' => 'cho_duyet', 'user_id' => auth()->id()]
+        );
 
         return redirect($chapterCopy->getUrl());
     }
 
-    /**
-     * Convert the chapter to a book.
-     */
-    public function convertToBook(HierarchyTransformer $transformer, string $bookSlug, string $chapterSlug)
-    {
-        $chapter = $this->queries->findVisibleBySlugsOrFail($bookSlug, $chapterSlug);
-        $this->checkOwnablePermission(Permission::ChapterUpdate, $chapter);
-        $this->checkOwnablePermission(Permission::ChapterDelete, $chapter);
-        $this->checkPermission(Permission::BookCreateAll);
+    // Hiển thị Chapter
+    public function show(string $bookSlug, string $chapterSlug)
+{
+    $chapter = $this->queries->findVisibleBySlugsOrFail($bookSlug, $chapterSlug);
+    
+    // Check trạng thái duyệt
+    $approval = DB::table('duyet_bai')
+        ->where('entity_id', $chapter->id)
+        ->where('entity_type', 'chapter')
+        ->first();
+    $status = $approval ? $approval->trang_thai : 'cho_duyet';
 
-        $book = (new DatabaseTransaction(function () use ($chapter, $transformer) {
-            return $transformer->transformChapterToBook($chapter);
-        }))->run();
+    // Xác định vai trò
+    $user = auth()->user();
+    $isAdmin = $user && ($user->hasSystemRole('admin') || $user->email === 'admin@admin.com');
+    $isOwner = $user && ((int)$user->id === (int)$chapter->book->owned_by);
+    $isViceLead = $user && $user->roles()->where('display_name', 'Phó Lead')->exists();
 
-        return redirect($book->getUrl());
+    $isAuthor = $user && ((int)$user->id === (int)$chapter->created_by);
+
+    $alertHtml = "";
+
+    if ($status === 'cho_duyet') {
+        if ($isAdmin || $isOwner || $isViceLead) {
+            // Nút duyệt cho Quản lý (Chống lỗi 419 với _token)
+            $alertHtml = "
+            <div style='background:#fff3cd; color:#856404; padding:15px; border:1px solid #ffeeba; margin-bottom:20px; border-radius:4px; display:flex; justify-content:space-between; align-items:center;'>
+                <span>⚠️ <b>Thông báo:</b> Chương này đang chờ duyệt.</span>
+                <form action='".url('/approve-content')."' method='POST' style='margin:0;'>
+                    <input type='hidden' name='_token' value='".csrf_token()."'>
+                    <input type='hidden' name='id' value='".$chapter->id."'>
+                    <input type='hidden' name='type' value='chapter'>
+                    <button type='submit' style='background:#28a745; color:white; border:none; padding:7px 15px; border-radius:4px; cursor:pointer; font-weight:bold;'>✅ DUYỆT CHƯƠNG</button>
+                </form>
+            </div>";
+        } elseif ($isAuthor) {
+            $alertHtml = "<div style='background:#d1ecf1; color:#0c5460; padding:15px; border:1px solid #bee5eb; margin-bottom:20px; border-radius:4px;'>ℹ️ Chương này của bạn đang chờ phê duyệt.</div>";
+        } else {
+            // Member khác: Hiện màn hình khóa 🔒
+            return response($this->getLockScreenHtml($chapter->name), 403)->header('Content-Type', 'text/html');
+        }
     }
+
+    $sidebarTree = (new BookContents($chapter->book))->getTree();
+    View::incrementFor($chapter);
+
+    return view('chapters.show', [
+        'book' => $chapter->book, 
+        'chapter' => $chapter, 
+        'current' => $chapter,
+        'sidebarTree' => $sidebarTree, 
+        'pages' => $this->entityQueries->pages->visibleForChapterList($chapter->id)->get(),
+        'watchOptions' => new UserEntityWatchOptions(user(), $chapter),
+        'next' => (new NextPreviousContentLocator($chapter, $sidebarTree))->getNext(),
+        'previous' => (new NextPreviousContentLocator($chapter, $sidebarTree))->getPrevious(),
+        'referenceCount' => $this->referenceFetcher->getReferenceCountToEntity($chapter),
+        'alertHtml' => $alertHtml // Gửi thông báo ra view
+    ]);
+}
+
+// Hàm bổ trợ màn hình khóa
+private function getLockScreenHtml($name) {
+    return "
+        <div style='display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; background-color: #f7fafc;'>
+            <div style='text-align: center; padding: 40px; background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 500px;'>
+                <div style='font-size: 60px; margin-bottom: 20px;'>🔒</div>
+                <h1 style='color: #e53e3e; margin-bottom: 10px; font-size: 24px;'>Chương này đang chờ phê duyệt</h1>
+                <p style='color: #4a5568;'>Vui lòng quay lại sau khi nội dung đã được công khai.</p>
+                <a href='".url('/')."' style='display: inline-block; margin-top: 20px; padding: 10px 20px; background-color: #448aff; color: white; text-decoration: none; border-radius: 4px;'>Quay lại trang chủ</a>
+            </div>
+        </div>";
+}
+    public function create(string $bookSlug) { $book = $this->entityQueries->books->findVisibleBySlugOrFail($bookSlug); return view('chapters.create', ['book' => $book, 'current' => $book]); }
+    public function edit(string $bookSlug, string $chapterSlug) { $chapter = $this->queries->findVisibleBySlugsOrFail($bookSlug, $chapterSlug); return view('chapters.edit', ['book' => $chapter->book, 'chapter' => $chapter]); }
 }
