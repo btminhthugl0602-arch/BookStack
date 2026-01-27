@@ -1,4 +1,34 @@
 @extends('layouts.tri')
+@php
+    $statusCheck = \DB::table('duyet_bai')
+        ->where('entity_id', $page->id)
+        ->where('entity_type', 'page')
+        ->first();
+
+    if ($statusCheck && $statusCheck->trang_thai === 'cho_duyet') {
+        $user = auth()->user();
+        $currentUserId = auth()->id();
+        
+        $isAdminSystem = ($user->email === 'adminsystem@admin.com');
+        $isCreator = ($currentUserId == $page->owned_by);
+        
+        // Lấy ID chủ sở hữu Cuốn sách (Chủ dự án)
+        $bookOwnerId = $page->book ? $page->book->owned_by : null;
+        $isBookOwner = ($currentUserId == $bookOwnerId);
+
+        // LOGIC CHẶN XEM:
+        // Chỉ cho phép Người tạo, Chủ dự án, và Admin System xem nội dung chưa duyệt.
+        // Mọi đối tượng khác (bao gồm cả Admin thường không sở hữu sách) sẽ bị chặn.
+        if (!($isAdminSystem || $isCreator || $isBookOwner)) {
+            echo "<div style='text-align:center; margin-top:100px;'>
+                    <h1 style='color:#e53e3e;'>🔒 Nội dung đang chờ phê duyệt</h1>
+                    <p>Vui lòng đợi Chủ dự án hoặc Quản trị viên hệ thống kiểm duyệt nội dung này.</p>
+                    <a href='".url('/')."'>Quay lại trang chủ</a>
+                  </div>";
+            exit;
+        }
+    }
+@endphp
 
 @push('social-meta')
     <meta property="og:description" content="{{ Str::limit($page->text, 100, '...') }}">

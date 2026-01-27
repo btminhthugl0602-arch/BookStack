@@ -1,5 +1,5 @@
 <?php
-
+use Illuminate\Support\Facades\DB;
 use BookStack\Access\Controllers as AccessControllers;
 use BookStack\Activity\Controllers as ActivityControllers;
 use BookStack\Api\ApiDocsController;
@@ -20,6 +20,8 @@ use BookStack\Users\Controllers as UserControllers;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 // Status & Meta routes
 Route::get('/status', [SettingControllers\StatusController::class, 'show']);
@@ -28,6 +30,7 @@ Route::get('/favicon.ico', [MetaController::class, 'favicon']);
 Route::get('/manifest.json', [MetaController::class, 'pwaManifest']);
 Route::get('/licenses', [MetaController::class, 'licenses']);
 Route::get('/opensearch.xml', [MetaController::class, 'opensearch']);
+
 
 // Authenticated routes...
 Route::middleware('auth')->group(function () {
@@ -382,3 +385,57 @@ Route::get('/theme/{theme}/{path}', [ThemeController::class, 'publicFile'])
     ->where('path', '.*$');
 
 Route::fallback([MetaController::class, 'notFound'])->name('fallback');
+
+
+
+Route::middleware(['web', 'auth'])->group(function () {
+    
+    Route::post('/approve-content', function (Request $request) {
+        $id = $request->input('id');
+        $type = $request->input('type'); 
+
+        // 1. Lấy thông tin thực tế từ bảng entities
+        $entity = DB::table('entities')->where('id', $id)->where('type', $type)->first();
+
+        if (!$entity) {
+            return back()->with('error', 'Không tìm thấy nội dung!');
+        }
+
+        // 2. Tìm chủ sách (Book Owner)
+        $bookOwnerId = DB::table('entities')
+            ->where('id', $entity->book_id)
+            ->where('type', 'book')
+            ->value('owned_by');
+
+        // 3. KIỂM TRA QUYỀN (SỬ DỤNG TRUY VẤN TRỰC TIẾP TRÁNH CACHE)
+        $user = auth()->user();
+        $userId = $user->id;
+
+        // Lấy tất cả Role ID của user này từ bảng trung gian
+        $userRoleIds = DB::table('role_user')->where('user_id', $userId)->pluck('role_id')->toArray();
+
+        // ĐIỀU KIỆN DUYỆT:
+        $isAdmin = in_array(1, $userRoleIds); // Admin ID 1
+        $isViceLead = in_array(7, $userRoleIds); // Phó Lead ID 7
+        $isBookOwner = ((int)$userId === (int)$bookOwnerId); // Chủ sách
+        $isSystemAdmin = ($user->email === 'admin@admin.com');
+
+        // Ghi log để kiểm tra (Xóa sau khi chạy thành công)
+        Log::info("User ID: $userId đang duyệt. Roles: " . implode(',', $userRoleIds) . " | isAdmin: $isAdmin | isViceLead: $isViceLead | isOwner: $isBookOwner");
+
+        if ($isAdmin || $isViceLead || $isBookOwner || $isSystemAdmin) {
+            DB::table('duyet_bai')->updateOrInsert(
+                ['entity_id' => $id, 'entity_type' => $type],
+                [
+                    'trang_thai' => 'da_duyet',
+                    'user_id'    => $userId,
+                    'updated_at' => now()
+                ]
+            );
+            
+            return back()->with('success', 'Đã duyệt thành công!');
+        }
+
+        return response("Bạn không có quyền! (Role của bạn: " . implode(',', $userRoleIds) . ")", 403);
+    });
+});
