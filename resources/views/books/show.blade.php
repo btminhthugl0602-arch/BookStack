@@ -149,16 +149,19 @@
             @include('entities.meta', ['entity' => $book, 'watchOptions' => $watchOptions])
             @if($book->hasPermissions())
                 <div class="active-restriction">
-                    @if(userCan(\BookStack\Permissions\Permission::RestrictionsManage, $book))
-                        <a href="{{ $book->getUrl('/permissions') }}" class="entity-meta-item">
-                            @icon('lock')
-                            <div>{{ trans('entities.books_permissions_active') }}</div>
+                    {{-- 1. NÚT TẠO BÁO CÁO (PAGE): Ai có quyền cũng thấy (Nhân viên + Sếp) --}}
+                    @if(userCan(\BookStack\Permissions\Permission::PageCreate, $book))
+                        <a href="{{ $book->getUrl('/create-page') }}" data-shortcut="new" class="icon-list-item">
+                            <span>@icon('add')</span><span>{{ trans('entities.pages_new') }}</span>
                         </a>
-                    @else
-                        <div class="entity-meta-item">
-                            @icon('lock')
-                            <div>{{ trans('entities.books_permissions_active') }}</div>
-                        </div>
+                    @endif
+
+                    {{-- 2. NÚT TẠO HẠNG MỤC (CHAPTER): CHỈ SẾP (LEADER) MỚI THẤY --}}
+                    {{-- Biến $isLeader đã được khai báo ở ngay trên đầu div actions rồi --}}
+                    @if($isLeader && userCan(\BookStack\Permissions\Permission::ChapterCreate, $book))
+                        <a href="{{ $book->getUrl('/create-chapter') }}" data-shortcut="new" class="icon-list-item">
+                            <span>@icon('add')</span><span>{{ trans('entities.chapters_new') }}</span>
+                        </a>
                     @endif
                 </div>
             @endif
@@ -178,12 +181,12 @@
                     <span>@icon('add')</span><span>{{ trans('entities.pages_new') }}</span>
                 </a>
             @endif
-            @if(userCan(\BookStack\Permissions\Permission::ChapterCreate, $book))
+            {{-- CHỈ HIỆN NÚT TẠO HẠNG MỤC NẾU LÀ LEADER --}}
+            @if($isLeader && userCan(\BookStack\Permissions\Permission::ChapterCreate, $book))
                 <a href="{{ $book->getUrl('/create-chapter') }}" data-shortcut="new" class="icon-list-item">
                     <span>@icon('add')</span><span>{{ trans('entities.chapters_new') }}</span>
                 </a>
             @endif
-
             <hr class="primary-background">
 
             {{-- 2. CÁC NÚT QUẢN TRỊ (CHỈ LEADER) --}}
