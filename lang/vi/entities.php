@@ -433,7 +433,7 @@ return [
     'copy_consider_attachments' => 'Các tệp đính kèm trang sẽ không được sao chép.',
     'copy_consider_access' => 'Việc thay đổi vị trí, chủ sở hữu hoặc quyền có thể dẫn đến thay đổi quyền truy cập.',
 
-    // Conversions
+    // Conversions1
     'convert_to_shelf' => 'Chuyển đổi thành Phòng ban',
     'convert_to_shelf_contents_desc' => 'Bạn có thể chuyển đổi dự án này thành một phòng ban mới. Các hạng mục sẽ được chuyển thành các dự án mới.',
     'convert_to_shelf_permissions_desc' => 'Bất kỳ quyền nào được đặt trên dự án này sẽ được sao chép sang phòng ban mới.',
