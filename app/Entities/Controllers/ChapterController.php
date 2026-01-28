@@ -27,22 +27,6 @@ class ChapterController extends Controller
     }
 
     /**
-     * Tạo Chapter mới -> Tự động kích hoạt quy trình duyệt
-     */
-    public function store(Request $request, string $bookSlug)
-    {
-        $validated = $this->validate($request, ['name' => ['required', 'string', 'max:255']]);
-        $book = $this->entityQueries->books->findVisibleBySlugOrFail($bookSlug);
-        
-        $chapter = $this->chapterRepo->create($validated, $book);
-
-        // ✅ DÒNG MỚI: Gọi Trait để xử lý duyệt
-        $chapter->syncApprovalStatus();
-
-        return redirect($chapter->getUrl());
-    }
-
-    /**
      * Cập nhật Chapter -> Cập nhật trạng thái
      */
     public function update(Request $request, string $bookSlug, string $chapterSlug)
@@ -134,9 +118,52 @@ class ChapterController extends Controller
         ]);
     }
 
-    public function create(string $bookSlug) { 
-        $book = $this->entityQueries->books->findVisibleBySlugOrFail($bookSlug); 
-        return view('chapters.create', ['book' => $book, 'current' => $book]); 
+    /**
+     * Show the form for creating a new chapter.
+     */
+    public function create(string $bookSlug)
+    {
+        // ✅ SỬA LẠI DÒNG NÀY: Dùng entityQueries->books để tìm dự án
+        $book = $this->entityQueries->books->findVisibleBySlugOrFail($bookSlug);
+        
+        // 🔒 CHẶN: Chỉ Admin hoặc Chủ dự án mới được tạo Hạng mục
+        if (auth()->id() != $book->owned_by && !auth()->user()->hasSystemRole('admin')) {
+             $this->showPermissionError();
+        }
+
+        $this->checkOwnablePermission(Permission::ChapterCreate, $book);
+
+        $this->setPageTitle(trans('entities.chapters_new'));
+        return view('chapters.create', ['book' => $book, 'current' => $book]);
+    }
+
+    /**
+     * Store a new chapter.
+     */
+    public function store(Request $request, string $bookSlug)
+    {
+        // ✅ SỬA LẠI DÒNG NÀY
+        $book = $this->entityQueries->books->findVisibleBySlugOrFail($bookSlug);
+
+        // 🔒 CHẶN: Chỉ Admin hoặc Chủ dự án mới được lưu Hạng mục
+        if (auth()->id() != $book->owned_by && !auth()->user()->hasSystemRole('admin')) {
+             $this->showPermissionError();
+        }
+
+        $this->checkOwnablePermission(Permission::ChapterCreate, $book);
+
+        $validated = $this->validate($request, [
+            'name' => ['required', 'string', 'max:255'],
+            'description_html' => ['string', 'max:2000'],
+            'tags' => ['array'],
+        ]);
+
+        $chapter = $this->chapterRepo->create($validated, $book);
+        
+        // Đồng bộ trạng thái duyệt
+        $chapter->syncApprovalStatus();
+
+        return redirect($chapter->getUrl());
     }
     
     public function edit(string $bookSlug, string $chapterSlug) { 
