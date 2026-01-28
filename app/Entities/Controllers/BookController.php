@@ -14,8 +14,6 @@ use BookStack\Entities\Tools\BookContents;
 use BookStack\Entities\Tools\Cloner;
 use BookStack\Entities\Tools\HierarchyTransformer;
 use BookStack\Entities\Tools\ShelfContext;
-use BookStack\Exceptions\ImageUploadException;
-use BookStack\Exceptions\NotFoundException;
 use BookStack\Facades\Activity;
 use BookStack\Http\Controller;
 use BookStack\Permissions\Permission;
@@ -23,8 +21,8 @@ use BookStack\References\ReferenceFetcher;
 use BookStack\Util\DatabaseTransaction;
 use BookStack\Util\SimpleListOptions;
 use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
-use Throwable;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class BookController extends Controller
 {
@@ -38,9 +36,6 @@ class BookController extends Controller
     ) {
     }
 
-    /**
-     * Display a listing of the book.
-     */
     public function index(Request $request)
     {
         $view = setting()->getForCurrentUser('books_view_type');
@@ -58,7 +53,6 @@ class BookController extends Controller
         $new = $this->queries->visibleForList()->orderBy('created_at', 'desc')->take(4)->get();
 
         $this->shelfContext->clearShelfContext();
-
         $this->setPageTitle(trans('entities.books'));
 
         return view('books.index', [
@@ -71,32 +65,18 @@ class BookController extends Controller
         ]);
     }
 
-    /**
-     * Show the form for creating a new book.
-     */
     public function create(?string $shelfSlug = null)
     {
         $this->checkPermission(Permission::BookCreateAll);
-
         $bookshelf = null;
         if ($shelfSlug !== null) {
             $bookshelf = $this->shelfQueries->findVisibleBySlugOrFail($shelfSlug);
             $this->checkOwnablePermission(Permission::BookshelfUpdate, $bookshelf);
         }
-
         $this->setPageTitle(trans('entities.books_create'));
-
-        return view('books.create', [
-            'bookshelf' => $bookshelf,
-        ]);
+        return view('books.create', ['bookshelf' => $bookshelf]);
     }
 
-    /**
-     * Store a newly created book in storage.
-     *
-     * @throws ImageUploadException
-     * @throws ValidationException
-     */
     public function store(Request $request, ?string $shelfSlug = null)
     {
         $this->checkPermission(Permission::BookCreateAll);
@@ -116,6 +96,9 @@ class BookController extends Controller
 
         $book = $this->bookRepo->create($validated);
 
+        // ✅ Đồng bộ trạng thái duyệt
+        $book->syncApprovalStatus();
+
         if ($bookshelf) {
             $bookshelf->appendBook($book);
             Activity::add(ActivityType::BOOKSHELF_UPDATE, $bookshelf);
@@ -124,18 +107,13 @@ class BookController extends Controller
         return redirect($book->getUrl());
     }
 
-    /**
-     * Display the specified book.
-     */
     public function show(Request $request, ActivityQueries $activities, string $slug)
     {
         try {
             $book = $this->queries->findVisibleBySlugOrFail($slug);
-        } catch (NotFoundException $exception) {
+        } catch (\Exception $exception) {
             $book = $this->entityQueries->findVisibleByOldSlugs('book', $slug);
-            if (is_null($book)) {
-                throw $exception;
-            }
+            if (is_null($book)) { throw $exception; }
             return redirect($book->getUrl());
         }
 
@@ -160,28 +138,26 @@ class BookController extends Controller
         ]);
     }
 
-    /**
-     * Show the form for editing the specified book.
-     */
     public function edit(string $slug)
     {
         $book = $this->queries->findVisibleBySlugOrFail($slug);
         $this->checkOwnablePermission(Permission::BookUpdate, $book);
         $this->setPageTitle(trans('entities.books_edit_named', ['bookName' => $book->getShortName()]));
-
         return view('books.edit', ['book' => $book, 'current' => $book]);
     }
 
     /**
-     * Update the specified book in storage.
-     *
-     * @throws ImageUploadException
-     * @throws ValidationException
-     * @throws Throwable
+     * UPDATE: Chặn nhân viên đổi tên/ảnh bìa dự án
      */
     public function update(Request $request, string $slug)
     {
         $book = $this->queries->findVisibleBySlugOrFail($slug);
+        
+        // 🔒 CHẶN: Chỉ Admin hoặc Chủ sách mới được sửa cấu hình
+        if (auth()->id() != $book->owned_by && !auth()->user()->hasSystemRole('admin')) {
+             $this->showPermissionError();
+        }
+
         $this->checkOwnablePermission(Permission::BookUpdate, $book);
 
         $validated = $this->validate($request, [
@@ -199,59 +175,44 @@ class BookController extends Controller
         }
 
         $book = $this->bookRepo->update($book, $validated);
+        $book->syncApprovalStatus(); // Đồng bộ trạng thái
 
         return redirect($book->getUrl());
     }
 
-    /**
-     * Shows the page to confirm deletion.
-     */
     public function showDelete(string $bookSlug)
     {
         $book = $this->queries->findVisibleBySlugOrFail($bookSlug);
         $this->checkOwnablePermission(Permission::BookDelete, $book);
         $this->setPageTitle(trans('entities.books_delete_named', ['bookName' => $book->getShortName()]));
-
         return view('books.delete', ['book' => $book, 'current' => $book]);
     }
 
     /**
-     * Remove the specified book from the system.
-     *
-     * @throws Throwable
+     * DESTROY: Chặn nhân viên xóa dự án
      */
     public function destroy(string $bookSlug)
     {
         $book = $this->queries->findVisibleBySlugOrFail($bookSlug);
+        
+        // 🔒 CHẶN: Chỉ Admin hoặc Chủ sách mới được xóa
+        if (auth()->id() != $book->owned_by && !auth()->user()->hasSystemRole('admin')) {
+             $this->showPermissionError();
+        }
+
         $this->checkOwnablePermission(Permission::BookDelete, $book);
-
         $this->bookRepo->destroy($book);
-
         return redirect('/books');
     }
 
-    /**
-     * Show the view to copy a book.
-     *
-     * @throws NotFoundException
-     */
     public function showCopy(string $bookSlug)
     {
         $book = $this->queries->findVisibleBySlugOrFail($bookSlug);
         $this->checkOwnablePermission(Permission::BookView, $book);
-
         session()->flashInput(['name' => $book->name]);
-
-        return view('books.copy', [
-            'book' => $book,
-        ]);
+        return view('books.copy', ['book' => $book]);
     }
 
-    /**
-     * Create a copy of a book within the requested target destination.
-     *
-     * @throws NotFoundException
-     */
     public function copy(Request $request, Cloner $cloner, string $bookSlug)
     {
         $book = $this->queries->findVisibleBySlugOrFail($bookSlug);
@@ -260,17 +221,26 @@ class BookController extends Controller
 
         $newName = $request->get('name') ?: $book->name;
         $bookCopy = $cloner->cloneBook($book, $newName);
+        
+        // ✅ Đồng bộ trạng thái cho sách copy
+        $bookCopy->syncApprovalStatus();
+        
         $this->showSuccessNotification(trans('entities.books_copy_success'));
-
         return redirect($bookCopy->getUrl());
     }
 
     /**
-     * Convert the chapter to a book.
+     * CONVERT: Chặn chuyển đổi cấu trúc
      */
     public function convertToShelf(HierarchyTransformer $transformer, string $bookSlug)
     {
         $book = $this->queries->findVisibleBySlugOrFail($bookSlug);
+
+        // 🔒 CHẶN: Chỉ Admin hoặc Chủ sách mới được chuyển đổi
+        if (auth()->id() != $book->owned_by && !auth()->user()->hasSystemRole('admin')) {
+             $this->showPermissionError();
+        }
+
         $this->checkOwnablePermission(Permission::BookUpdate, $book);
         $this->checkOwnablePermission(Permission::BookDelete, $book);
         $this->checkPermission(Permission::BookshelfCreateAll);
@@ -281,5 +251,65 @@ class BookController extends Controller
         }))->run();
 
         return redirect($shelf->getUrl());
+    }
+
+    /**
+     * THÊM THÀNH VIÊN VÀO DỰ ÁN
+     */
+    public function addMember(Request $request, string $slug)
+    {
+        $book = $this->queries->findVisibleBySlugOrFail($slug);
+
+        if ($book->owned_by != auth()->id()) {
+            $this->showPermissionError();
+        }
+
+        $validated = $this->validate($request, [
+            'email' => ['required', 'email', 'exists:users,email']
+        ], [
+            'email.exists' => 'Không tìm thấy nhân viên nào có email này.'
+        ]);
+
+        $userToAdd = \BookStack\Users\Models\User::where('email', $validated['email'])->first();
+
+        $exists = DB::table('project_members')
+            ->where('book_id', $book->id)
+            ->where('user_id', $userToAdd->id)
+            ->exists();
+
+        if ($exists) {
+            $this->showErrorNotification("Nhân viên này đã có trong dự án rồi!");
+            return redirect($book->getUrl());
+        }
+
+        DB::table('project_members')->insert([
+            'book_id' => $book->id,
+            'user_id' => $userToAdd->id,
+            'role'    => 'member',
+            'created_at' => now()
+        ]);
+
+        $this->showSuccessNotification("Đã thêm thành viên {$userToAdd->name} vào dự án.");
+        return redirect($book->getUrl());
+    }
+
+    /**
+     * XÓA THÀNH VIÊN KHỎI DỰ ÁN
+     */
+    public function removeMember(Request $request, string $slug, int $userId)
+    {
+        $book = $this->queries->findVisibleBySlugOrFail($slug);
+
+        if ($book->owned_by != auth()->id()) {
+            $this->showPermissionError();
+        }
+
+        DB::table('project_members')
+            ->where('book_id', $book->id)
+            ->where('user_id', $userId)
+            ->delete();
+
+        $this->showSuccessNotification("Đã mời thành viên ra khỏi dự án.");
+        return redirect($book->getUrl());
     }
 }

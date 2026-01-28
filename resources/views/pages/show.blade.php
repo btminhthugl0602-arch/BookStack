@@ -1,4 +1,34 @@
 @extends('layouts.tri')
+@php
+    $statusCheck = \DB::table('duyet_bai')
+        ->where('entity_id', $page->id)
+        ->where('entity_type', 'page')
+        ->first();
+
+    if ($statusCheck && $statusCheck->trang_thai === 'cho_duyet') {
+        $user = auth()->user();
+        $currentUserId = auth()->id();
+        
+        $isAdminSystem = ($user->email === 'adminsystem@admin.com');
+        $isCreator = ($currentUserId == $page->owned_by);
+        
+        // Lấy ID chủ sở hữu Cuốn sách (Chủ dự án)
+        $bookOwnerId = $page->book ? $page->book->owned_by : null;
+        $isBookOwner = ($currentUserId == $bookOwnerId);
+
+        // LOGIC CHẶN XEM:
+        // Chỉ cho phép Người tạo, Chủ dự án, và Admin System xem nội dung chưa duyệt.
+        // Mọi đối tượng khác (bao gồm cả Admin thường không sở hữu sách) sẽ bị chặn.
+        if (!($isAdminSystem || $isCreator || $isBookOwner)) {
+            echo "<div style='text-align:center; margin-top:100px;'>
+                    <h1 style='color:#e53e3e;'>🔒 Nội dung đang chờ phê duyệt</h1>
+                    <p>Vui lòng đợi Chủ dự án hoặc Quản trị viên hệ thống kiểm duyệt nội dung này.</p>
+                    <a href='".url('/')."'>Quay lại trang chủ</a>
+                  </div>";
+            exit;
+        }
+    }
+@endphp
 
 @push('social-meta')
     <meta property="og:description" content="{{ Str::limit($page->text, 100, '...') }}">
@@ -136,59 +166,46 @@
 
     <div class="actions mb-xl">
         <h5>{{ trans('common.actions') }}</h5>
-
         <div class="icon-list text-link">
+            @php $isLeader = (auth()->id() === $page->book->owned_by) || auth()->user()->hasSystemRole('admin'); @endphp
 
-            {{--User Actions--}}
+            @if(userCan(\BookStack\Permissions\Permission::PageCreate, $page))
+                <a href="{{ $page->getUrl('/create-page') }}" data-shortcut="new" class="icon-list-item">
+                    <span>@icon('add')</span><span>{{ trans('entities.pages_new') }}</span>
+                </a>
+            @endif
+
+            <hr class="primary-background">
+
             @if(userCan(\BookStack\Permissions\Permission::PageUpdate, $page))
                 <a href="{{ $page->getUrl('/edit') }}" data-shortcut="edit" class="icon-list-item">
-                    <span>@icon('edit')</span>
-                    <span>{{ trans('common.edit') }}</span>
+                    <span>@icon('edit')</span><span>{{ trans('common.edit') }}</span>
                 </a>
             @endif
-            @if(userCan(\BookStack\Permissions\Permission::PageCreateAll) || userCan(\BookStack\Permissions\Permission::PageCreateOwn) || userCanOnAny(\BookStack\Permissions\Permission::Create, \BookStack\Entities\Models\Book::class) || userCanOnAny(\BookStack\Permissions\Permission::Create, \BookStack\Entities\Models\Chapter::class))
+
+            {{-- Các chức năng quản lý cao cấp (CHỈ LEADER) --}}
+            @if($isLeader)
+                <a href="{{ $page->getUrl('/move') }}" data-shortcut="move" class="icon-list-item">
+                    <span>@icon('folder')</span><span>{{ trans('common.move') }}</span>
+                </a>
+                <a href="{{ $page->getUrl('/revisions') }}" data-shortcut="history" class="icon-list-item">
+                    <span>@icon('history')</span><span>{{ trans('entities.revisions') }}</span>
+                </a>
                 <a href="{{ $page->getUrl('/copy') }}" data-shortcut="copy" class="icon-list-item">
-                    <span>@icon('copy')</span>
-                    <span>{{ trans('common.copy') }}</span>
+                    <span>@icon('copy')</span><span>{{ trans('common.copy') }}</span>
                 </a>
-            @endif
-            @if(userCan(\BookStack\Permissions\Permission::PageUpdate, $page))
-                @if(userCan(\BookStack\Permissions\Permission::PageDelete, $page))
-	                <a href="{{ $page->getUrl('/move') }}" data-shortcut="move" class="icon-list-item">
-	                    <span>@icon('folder')</span>
-	                    <span>{{ trans('common.move') }}</span>
-	                </a>
-                @endif
-            @endif
-            <a href="{{ $page->getUrl('/revisions') }}" data-shortcut="revisions" class="icon-list-item">
-                <span>@icon('history')</span>
-                <span>{{ trans('entities.revisions') }}</span>
-            </a>
-            @if(userCan(\BookStack\Permissions\Permission::RestrictionsManage, $page))
                 <a href="{{ $page->getUrl('/permissions') }}" data-shortcut="permissions" class="icon-list-item">
-                    <span>@icon('lock')</span>
-                    <span>{{ trans('entities.permissions') }}</span>
+                    <span>@icon('lock')</span><span>{{ trans('entities.permissions') }}</span>
                 </a>
-            @endif
-            @if(userCan(\BookStack\Permissions\Permission::PageDelete, $page))
                 <a href="{{ $page->getUrl('/delete') }}" data-shortcut="delete" class="icon-list-item">
-                    <span>@icon('delete')</span>
-                    <span>{{ trans('common.delete') }}</span>
+                    <span>@icon('delete')</span><span>{{ trans('common.delete') }}</span>
                 </a>
             @endif
 
-            <hr class="primary-background"/>
-
-            @if($watchOptions->canWatch() && !$watchOptions->isWatching())
-                @include('entities.watch-action', ['entity' => $page])
-            @endif
-            @if(!user()->isGuest())
-                @include('entities.favourite-action', ['entity' => $page])
-            @endif
+            <hr class="primary-background">
             @if(userCan(\BookStack\Permissions\Permission::ContentExport))
                 @include('entities.export-menu', ['entity' => $page])
             @endif
         </div>
-
     </div>
 @stop

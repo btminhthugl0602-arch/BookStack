@@ -1,5 +1,5 @@
 <?php
-
+use Illuminate\Support\Facades\DB;
 use BookStack\Access\Controllers as AccessControllers;
 use BookStack\Activity\Controllers as ActivityControllers;
 use BookStack\Api\ApiDocsController;
@@ -20,6 +20,8 @@ use BookStack\Users\Controllers as UserControllers;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 // Status & Meta routes
 Route::get('/status', [SettingControllers\StatusController::class, 'show']);
@@ -28,6 +30,7 @@ Route::get('/favicon.ico', [MetaController::class, 'favicon']);
 Route::get('/manifest.json', [MetaController::class, 'pwaManifest']);
 Route::get('/licenses', [MetaController::class, 'licenses']);
 Route::get('/opensearch.xml', [MetaController::class, 'opensearch']);
+
 
 // Authenticated routes...
 Route::middleware('auth')->group(function () {
@@ -83,7 +86,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/books/{bookSlug}/export/markdown', [ExportControllers\BookExportController::class, 'markdown']);
     Route::get('/books/{bookSlug}/export/zip', [ExportControllers\BookExportController::class, 'zip']);
     Route::get('/books/{bookSlug}/export/plaintext', [ExportControllers\BookExportController::class, 'plainText']);
-
+    // Routes quản lý thành viên dự án (Add Member)
+    Route::post('/books/{bookSlug}/member', [EntityControllers\BookController::class, 'addMember']);
+    Route::delete('/books/{bookSlug}/member/{userId}', [EntityControllers\BookController::class, 'removeMember']);
     // Pages
     Route::get('/books/{bookSlug}/create-page', [EntityControllers\PageController::class, 'create']);
     Route::post('/books/{bookSlug}/create-guest-page', [EntityControllers\PageController::class, 'createAsGuest']);
@@ -382,3 +387,50 @@ Route::get('/theme/{theme}/{path}', [ThemeController::class, 'publicFile'])
     ->where('path', '.*$');
 
 Route::fallback([MetaController::class, 'notFound'])->name('fallback');
+
+
+
+Route::middleware(['web', 'auth'])->group(function () {
+    
+    // --- ROUTE DUYỆT BÀI (Đã sửa lại khớp với URL) ---
+    Route::post('/approve-entity/{type}/{id}', function (Request $request, $type, $id) {
+        
+        // 1. Lấy thông tin thực tế từ bảng entities
+        $entity = DB::table('entities')->where('id', $id)->where('type', $type)->first();
+
+        if (!$entity) {
+            return back()->with('error', 'Không tìm thấy nội dung!');
+        }
+
+        // 2. Tìm chủ sách (Book Owner) - Xử lý cả trường hợp duyệt Sách hoặc duyệt Page/Chapter
+        $bookId = ($type === 'book') ? $entity->id : $entity->book_id;
+        
+        $bookOwnerId = DB::table('entities')
+            ->where('id', $bookId)
+            ->where('type', 'book')
+            ->value('owned_by');
+
+        // 3. KIỂM TRA QUYỀN
+        $user = auth()->user();
+        $userId = $user->id;
+        $userRoleIds = DB::table('role_user')->where('user_id', $userId)->pluck('role_id')->toArray();
+
+        $isAdmin = in_array(1, $userRoleIds); // Admin
+        $isBookOwner = ((int)$userId === (int)$bookOwnerId); // Chủ dự án
+
+        // Chỉ Admin hoặc Chủ dự án mới được duyệt
+        if ($isAdmin || $isBookOwner) {
+            DB::table('duyet_bai')->updateOrInsert(
+                ['entity_id' => $id, 'entity_type' => $type],
+                [
+                    'trang_thai' => 'da_duyet',
+                    'user_id'    => $userId,
+                    'updated_at' => now()
+                ]
+            );
+            return back()->with('success', 'Đã duyệt thành công!');
+        }
+
+        return response("Bạn không có quyền duyệt bài viết này!", 403);
+    });
+});
