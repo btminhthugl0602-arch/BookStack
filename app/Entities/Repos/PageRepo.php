@@ -6,7 +6,7 @@ use BookStack\Activity\ActivityType;
 use BookStack\Entities\Models\Book;
 use BookStack\Entities\Models\Chapter;
 use BookStack\Entities\Models\Entity;
-use BookStack\Entities\Models\Page;
+use BookStack\Entities\Models\Page; // Quan trọng
 use BookStack\Entities\Models\PageRevision;
 use BookStack\Entities\Queries\EntityQueries;
 use BookStack\Entities\Tools\BookContents;
@@ -15,6 +15,7 @@ use BookStack\Entities\Tools\PageEditorType;
 use BookStack\Entities\Tools\ParentChanger;
 use BookStack\Entities\Tools\TrashCan;
 use BookStack\Exceptions\MoveOperationException;
+use BookStack\Exceptions\NotFoundException; // Quan trọng
 use BookStack\Exceptions\PermissionsException;
 use BookStack\Facades\Activity;
 use BookStack\Permissions\Permission;
@@ -25,6 +26,9 @@ use Exception;
 
 class PageRepo
 {
+    // --- PHẦN BỔ SUNG QUAN TRỌNG ĐỂ SỬA LỖI ---
+    protected Page $page;
+
     public function __construct(
         protected BaseRepo $baseRepo,
         protected RevisionRepo $revisionRepo,
@@ -33,8 +37,11 @@ class PageRepo
         protected ReferenceUpdater $referenceUpdater,
         protected TrashCan $trashCan,
         protected ParentChanger $parentChanger,
+        Page $page // Nạp model Page vào đây
     ) {
+        $this->page = $page; // Gán vào biến của class
     }
+    // --- HẾT PHẦN BỔ SUNG ---
 
     /**
      * Get a new draft page belonging to the given parent entity.
@@ -63,7 +70,7 @@ class PageRepo
         $defaultTemplate = $page->chapter?->defaultTemplate()->get() ?? $page->book?->defaultTemplate()->get();
         if ($defaultTemplate) {
             $page->forceFill([
-                'html'  => $defaultTemplate->html,
+                'html'     => $defaultTemplate->html,
                 'markdown' => $defaultTemplate->markdown,
             ]);
             $page->text = (new PageContent($page))->toPlainText();
@@ -212,10 +219,10 @@ class PageRepo
     }
 
     /**
-     * Destroy a page from the system.
-     *
-     * @throws Exception
+     * Remove the specified page from storage.
+     * Xóa trang khỏi hệ thống.
      */
+    
     public function destroy(Page $page): void
     {
         $this->trashCan->softDestroyPage($page);
@@ -311,5 +318,22 @@ class PageRepo
         }
 
         return (new BookContents($page->book))->getLastPriority() + 1;
+    }
+    
+    /**
+     * Get a page via the book slug and page slug.
+     */
+    public function getBySlug(string $bookSlug, string $pageSlug): Page
+    {
+        $page = $this->page->where('slug', '=', $pageSlug)
+            ->whereHas('book', function ($query) use ($bookSlug) {
+                $query->where('slug', '=', $bookSlug);
+            })->first();
+
+        if ($page === null) {
+            throw new NotFoundException(trans('errors.page_not_found'));
+        }
+
+        return $page;
     }
 }

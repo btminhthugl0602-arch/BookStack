@@ -181,19 +181,92 @@ class PageController extends Controller
         $editorData = new PageEditorData($page, $this->entityQueries, $request->query('editor', ''));
         return view('pages.edit', $editorData->getViewData());
     }
-    public function destroy(string $bookSlug, string $pageSlug)
+    /**
+     * Show the move page view.
+     */
+    public function showMove(string $bookSlug, string $pageSlug)
     {
-        $page = $this->queries->findVisibleBySlugOrFail($pageSlug);
+        $page = $this->pageRepo->getBySlug($bookSlug, $pageSlug);
+        $this->checkOwnablePermission('page-update', $page);
+        $this->checkOwnablePermission('page-delete', $page);
 
-        // 🔒 CHẶN: Kiểm tra chủ của CUỐN SÁCH cha
-        // Lưu ý: Page có thể nằm trong Chapter, nhưng luôn thuộc về Book
-        $book = $page->book; 
-        if (auth()->id() != $book->owned_by && !auth()->user()->hasSystemRole('admin')) {
-             $this->showPermissionError();
+        return view('pages.move', [
+            'book' => $page->book,
+            'page' => $page,
+        ]);
+    }
+    /**
+     * Move the page to a new parent.
+     * Xử lý hành động di chuyển trang.
+     */
+    public function move(Request $request, string $bookSlug, string $pageSlug)
+    {
+        // 1. Tìm trang cần di chuyển
+        $page = $this->pageRepo->getBySlug($bookSlug, $pageSlug);
+        
+        // 2. Kiểm tra quyền
+        $this->checkOwnablePermission('page-update', $page);
+        $this->checkOwnablePermission('page-delete', $page);
+
+        // 3. Lấy đích đến từ form gửi lên
+        $entitySelection = $request->get('entity_selection', null);
+        if ($entitySelection === null || $entitySelection === '') {
+            return redirect()->back();
         }
 
-        $this->checkOwnablePermission(Permission::PageDelete, $page);
+        // 4. Gọi PageRepo để thực hiện di chuyển
+        $this->pageRepo->move($page, $entitySelection);
+
+        // 5. Chuyển hướng về trang sau khi di chuyển xong
+        return redirect($page->getUrl());
+    }
+    /**
+     * Show the delete page view.
+     */
+    /**
+     * Show the delete page view.
+     */
+    public function showDelete(string $bookSlug, string $pageSlug)
+    {
+        // 1. Tìm trang theo Slug
+        $page = $this->pageRepo->getBySlug($bookSlug, $pageSlug);
+        
+        // 2. Kiểm tra quyền xóa
+        $this->checkOwnablePermission('page-delete', $page);
+
+        // 3. THÊM DÒNG NÀY: Khai báo biến usedAsTemplate để tránh lỗi Undefined variable
+        // Mặc định để là 0 (coi như không dùng làm template) để an toàn nhất
+        $usedAsTemplate = 0; 
+
+        // 4. Trả về giao diện kèm đầy đủ biến
+        return view('pages.delete', [
+            'book' => $page->book,
+            'page' => $page,
+            'usedAsTemplate' => $usedAsTemplate, // <--- QUAN TRỌNG
+        ]);
+    }
+    /**
+     * Remove the specified page from storage.
+     * Xóa trang khỏi hệ thống.
+     */
+    public function destroy(string $bookSlug, string $pageSlug)
+    {
+        // 1. Dùng hàm getBySlug từ PageRepo (cái mà bạn đã sửa ở file kia)
+        // Code cũ của bạn dùng $this->queries->findVisibleBySlugOrFail($pageSlug) bị thiếu tham số $bookSlug nên gây lỗi.
+        $page = $this->pageRepo->getBySlug($bookSlug, $pageSlug);
+
+        // 2. Kiểm tra quyền (Logic chặn xóa nếu không phải chủ Book)
+        // Mình giữ lại logic kiểm tra quyền riêng của bạn ở đây
+        $book = $page->book; 
+        if (auth()->id() != $book->owned_by && !auth()->user()->hasSystemRole('admin')) {
+             // Nếu không phải admin và không phải chủ sách thì chặn
+             $this->checkOwnablePermission('page-delete', $page); 
+        }
+
+        // 3. Thực hiện xóa
         $this->pageRepo->destroy($page);
-        return redirect($page->getParent()->getUrl());
+
+        // 4. Quay về trang chủ của cuốn sách
+        return redirect($page->book->getUrl());
     }
 }
