@@ -14,6 +14,10 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\Relation;
 
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+
+
 class ActivityQueries
 {
     public function __construct(
@@ -26,19 +30,57 @@ class ActivityQueries
      * Gets the latest activity.
      */
     public function latest(int $count = 20, int $page = 0): array
-    {
-        $activityList = $this->permissions
-            ->restrictEntityRelationQuery(Activity::query(), 'activities', 'loggable_id', 'loggable_type')
-            ->orderBy('created_at', 'desc')
-            ->with(['user'])
-            ->skip($count * $page)
-            ->take($count)
-            ->get();
+{
+    $userId = auth()->id();
 
-        $this->listLoader->loadIntoRelations($activityList->all(), 'loggable', false);
+    // Lấy danh sách book user tham gia
+    $bookIds = DB::table('project_members')
+        ->where('user_id', $userId)
+        ->pluck('book_id')
+        ->toArray();
 
-        return $this->filterSimilar($activityList);
-    }
+    // Thêm book do user làm chủ
+    $ownedBookIds = DB::table('entities')
+        ->where('type', 'book')
+        ->where('owned_by', $userId)
+        ->pluck('id')
+        ->toArray();
+
+    $allowedBookIds = array_unique(array_merge($bookIds, $ownedBookIds));
+
+    $activityList = $this->permissions
+    ->restrictEntityRelationQuery(
+        Activity::query(),
+        'activities',
+        'loggable_id',
+        'loggable_type'
+    )
+    ->where(function ($query) use ($allowedBookIds) {
+        $query
+            ->where(function ($q) use ($allowedBookIds) {
+                $q->where('loggable_type', 'book')
+                  ->whereIn('loggable_id', $allowedBookIds);
+            })
+            ->orWhere(function ($q) use ($allowedBookIds) {
+                $q->whereIn('loggable_type', ['page', 'chapter'])
+                  ->whereIn('loggable_id', function ($sub) use ($allowedBookIds) {
+                      $sub->select('id')
+                          ->from('entities')
+                          ->whereIn('book_id', $allowedBookIds);
+                  });
+            });
+    })
+    ->orderBy('created_at', 'desc')
+    ->with(['user'])
+    ->skip($count * $page)
+    ->take($count)
+    ->get();
+        
+
+    return $this->filterSimilar($activityList);
+}
+
+
 
     /**
      * Gets the latest activity for an entity, Filtering out similar

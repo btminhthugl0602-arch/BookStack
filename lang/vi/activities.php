@@ -137,4 +137,9 @@ return [
 
     // Other
     'permissions_update'          => 'các quyền đã được cập nhật',
+
+    'book_member_added' => 'đã thêm :detail vào dự án',
+    'book_member_removed' => 'đã xóa thành viên :detail ra khỏi dự án',
+    'entity_approved' => 'đã duyệt nội dung :detail',
+
 ];
