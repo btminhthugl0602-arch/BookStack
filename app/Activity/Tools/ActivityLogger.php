@@ -13,6 +13,8 @@ use BookStack\Theming\ThemeEvents;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Log;
 
+
+
 class ActivityLogger
 {
     public function __construct(
@@ -24,12 +26,25 @@ class ActivityLogger
     /**
      * Add a generic activity event to the database.
      */
-    public function add(string $type, string|Loggable $detail = ''): void
+    /**
+    
+     * Add a generic activity event to the database.
+     * SỬA LỖI: Thêm tham số $secondDetail = null để nhận User từ Controller
+     */
+    public function add(string $type, string|Loggable $detail = '', $secondDetail = null): void
     {
+        // Mặc định lấy thông tin từ tham số thứ 2 (Ví dụ: Sách 6)
         $detailToStore = ($detail instanceof Loggable) ? $detail->logDescriptor() : $detail;
 
+        // --- ĐOẠN CODE QUAN TRỌNG MỚI ---
+        // Nếu có tham số thứ 3 (Người được thêm), ta lấy TÊN của họ lưu đè vào
+        if ($secondDetail !== null && isset($secondDetail->name)) {
+            $detailToStore = $secondDetail->name;
+        }
+        // --------------------------------
+
         $activity = $this->newActivityForUser($type);
-        $activity->detail = $detailToStore;
+        $activity->detail = $detailToStore; // Lưu tên người (hoặc thông tin sách nếu không có người)
 
         if ($detail instanceof Entity) {
             $activity->loggable_id = $detail->id;
@@ -52,7 +67,7 @@ class ActivityLogger
         return (new Activity())->forceFill([
             'type'     => strtolower($type),
             'user_id'  => user()->id,
-            'ip'       => IpFormatter::fromCurrentRequest()->format(),
+            'ip'       => request()->ip(), // <--- Sửa thành dòng này (Chuẩn Laravel, không cần import)
         ]);
     }
 

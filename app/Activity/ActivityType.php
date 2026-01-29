@@ -21,6 +21,11 @@ class ActivityType
     const BOOK_DELETE = 'book_delete';
     const BOOK_SORT = 'book_sort';
 
+    //them
+    const BOOK_MEMBER_ADDED = 'book_member_added';
+    const BOOK_MEMBER_REMOVED = 'book_member_removed';
+    const ENTITY_APPROVED  = 'entity_approved';
+
     const BOOKSHELF_CREATE = 'bookshelf_create';
     const BOOKSHELF_CREATE_FROM_BOOK = 'bookshelf_create_from_book';
     const BOOKSHELF_UPDATE = 'bookshelf_update';

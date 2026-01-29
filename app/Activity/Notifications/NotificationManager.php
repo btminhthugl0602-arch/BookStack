@@ -12,12 +12,23 @@ use BookStack\Activity\Notifications\Handlers\PageCreationNotificationHandler;
 use BookStack\Activity\Notifications\Handlers\PageUpdateNotificationHandler;
 use BookStack\Users\Models\User;
 
+//them
+use BookStack\Activity\Notifications\ProjectMemberAddedNotification;
+use BookStack\Activity\Notifications\EntityApprovedNotification;
+use BookStack\Entities\Models\Book;
+use BookStack\Entities\Models\Entity;
+use BookStack\Activity\Notifications\Handlers\EntityApprovedNotificationHandler;
+use BookStack\Activity\Notifications\Handlers\ProjectMemberAddedNotificationHandler;
+
+
 class NotificationManager
 {
     /**
      * @var class-string<NotificationHandler>[]
      */
     protected array $handlers = [];
+
+    
 
     public function handle(Activity $activity, string|Loggable $detail, User $user): void
     {
@@ -51,5 +62,8 @@ class NotificationManager
         $this->registerHandler(ActivityType::COMMENT_CREATE, CommentCreationNotificationHandler::class);
         $this->registerHandler(ActivityType::COMMENT_CREATE, CommentMentionNotificationHandler::class);
         $this->registerHandler(ActivityType::COMMENT_UPDATE, CommentMentionNotificationHandler::class);
+        $this->registerHandler(ActivityType::BOOK_MEMBER_ADDED, ProjectMemberAddedNotificationHandler::class);
+        $this->registerHandler(ActivityType::ENTITY_APPROVED, EntityApprovedNotificationHandler::class);
+
     }
 }
