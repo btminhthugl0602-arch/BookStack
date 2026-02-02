@@ -22,6 +22,9 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use BookStack\Http\Controllers\FaceLoginController;
+use BookStack\Http\Controllers\FaceRegisterController;
+use BookStack\Http\Controllers\FaceUploadController;
 
 // Status & Meta routes
 Route::get('/status', [SettingControllers\StatusController::class, 'show']);
@@ -434,3 +437,9 @@ Route::middleware(['web', 'auth'])->group(function () {
         return response("Bạn không có quyền duyệt bài viết này!", 403);
     });
 });
+
+Route::post('/login/face', [FaceLoginController::class, 'login']); // ← THÊM DÒNG NÀY
+Route::post('/user/face/register', [FaceRegisterController::class, 'register'])
+    ->middleware('auth');
+Route::post('/user/face/upload-register', [FaceUploadController::class, 'uploadRegister'])
+    ->middleware('auth');

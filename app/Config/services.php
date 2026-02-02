@@ -40,6 +40,11 @@ return [
         'auto_confirm'   => env('GOOGLE_AUTO_CONFIRM_EMAIL', false),
         'select_account' => env('GOOGLE_SELECT_ACCOUNT', false),
     ],
+    'facepp' => [
+        'key' => env('FACEPP_API_KEY'),
+        'secret' => env('FACEPP_API_SECRET'),
+        'faceset' => env('FACEPP_FACESET_TOKEN'),
+    ],
 
     'slack'   => [
         'client_id'     => env('SLACK_APP_ID', false),

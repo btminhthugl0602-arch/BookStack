@@ -1,3 +1,6 @@
+
+import './face-login';
+import './face-register-profile';
 import {EventManager} from './services/events';
 import {HttpManager} from './services/http';
 import {Translator} from './services/translations';
