@@ -232,11 +232,11 @@
         <div class="icon-list text-link">
             @php $isLeader = (auth()->id() === $page->book->owned_by) || auth()->user()->hasSystemRole('admin'); @endphp
 
-            @if(userCan(\BookStack\Permissions\Permission::PageCreate, $page))
+            <!-- @if(userCan(\BookStack\Permissions\Permission::PageCreate, $page))
                 <a href="{{ $page->getUrl('/create-page') }}" data-shortcut="new" class="icon-list-item">
                     <span>@icon('add')</span><span>{{ trans('entities.pages_new') }}</span>
                 </a>
-            @endif
+            @endif -->
 
             <hr class="primary-background">
 
