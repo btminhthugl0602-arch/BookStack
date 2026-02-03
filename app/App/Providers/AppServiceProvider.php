@@ -19,6 +19,8 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
+// them
+use BookStack\Users\Models\User;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -76,5 +78,10 @@ class AppServiceProvider extends ServiceProvider
             'page'      => Page::class,
             'comment'   => Comment::class,
         ]);
+
+        // them
+        Relation::enforceMorphMap([
+        'user' => User::class,
+    ]);
     }
 }

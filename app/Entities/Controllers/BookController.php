@@ -24,6 +24,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
+
 class BookController extends Controller
 {
     public function __construct(
@@ -289,6 +290,8 @@ class BookController extends Controller
             'created_at' => now()
         ]);
 
+        Activity::add(ActivityType::BOOK_MEMBER_ADDED, $book, $userToAdd);
+
         $this->showSuccessNotification("Đã thêm thành viên {$userToAdd->name} vào dự án.");
         return redirect($book->getUrl());
     }
@@ -304,10 +307,20 @@ class BookController extends Controller
             $this->showPermissionError();
         }
 
+        // 1. Lấy thông tin user bị xóa để ghi log (Làm trước khi xóa hoặc chỉ cần ID)
+        $userToRemove = \BookStack\Users\Models\User::find($userId);
+
+        // 2. Thực hiện xóa
         DB::table('project_members')
             ->where('book_id', $book->id)
             ->where('user_id', $userId)
             ->delete();
+
+        // 3. Ghi log (Nếu user tồn tại)
+        if ($userToRemove) {
+            // Tham số 3 ($userToRemove) giúp hiển thị tên người bị xóa
+            Activity::add(ActivityType::BOOK_MEMBER_REMOVED, $book, $userToRemove);
+        }
 
         $this->showSuccessNotification("Đã mời thành viên ra khỏi dự án.");
         return redirect($book->getUrl());
