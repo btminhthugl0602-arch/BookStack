@@ -38,6 +38,7 @@
 
 @section('body')
 
+
     <div class="mb-m print-hidden">
         @include('entities.breadcrumbs', ['crumbs' => [
             $page->book,
@@ -45,7 +46,68 @@
             $page,
         ]])
     </div>
+    
+    
+{{-- KHUNG AI TÓM TẮT --}}
+    <div id="ai-summary-box" style="margin: 20px 0; border: 1px solid #cce5ff; background: #f0f7ff; border-radius: 8px; padding: 15px; display: none;">
+        <div style="display: flex; align-items: center; margin-bottom: 10px;">
+            <span style="font-size: 20px; margin-right: 10px;">🤖</span>
+            <strong style="color: #004085;">Trợ lý AI tóm tắt:</strong>
+        </div>
+        <div id="ai-content" style="font-style: italic; color: #333; line-height: 1.6;">
+            Đang phân tích...
+        </div>
+    </div>
 
+    {{-- NÚT BẤM GỌI AI --}}
+    <div class="mb-m">
+        <button type="button" id="btn-ai-summarize" class="button outline" style="border-color: #8854d0; color: #8854d0;">
+            ✨ Tóm tắt báo cáo này
+        </button>
+    </div>
+
+    {{-- SCRIPT GỌI API --}}
+    <script nonce="{{ $cspNonce }}">
+        document.getElementById('btn-ai-summarize').addEventListener('click', function() {
+            const btn = this;
+            const box = document.getElementById('ai-summary-box');
+            const content = document.getElementById('ai-content');
+            
+            // Hiệu ứng loading
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Đang suy nghĩ...';
+            box.style.display = 'block';
+            content.innerHTML = 'Đang kết nối tới Google AI Studio...';
+
+            // Gọi về Server
+            const formData = new FormData();
+            formData.append('page_id', '{{ $page->id }}');
+            formData.append('_token', '{{ csrf_token() }}'); // Token bảo mật của Laravel
+
+            fetch('{{ url("/ai/summarize") }}', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Convert xuống dòng \n thành <br> để hiển thị đẹp
+                    content.innerHTML = data.summary.replace(/\n/g, '<br>');
+                    btn.innerHTML = '✅ Đã tóm tắt xong';
+                } else {
+                    content.innerHTML = '❌ Lỗi: ' + data.message;
+                    btn.innerHTML = 'Thử lại';
+                    btn.disabled = false;
+                }
+            })
+            .catch(error => {
+                content.innerHTML = '❌ Lỗi hệ thống!';
+                console.error(error);
+                btn.disabled = false;
+                btn.innerHTML = 'Thử lại';
+            });
+        });
+    </script>
     <main class="content-wrap card">
         <div component="page-display"
              option:page-display:page-id="{{ $page->id }}"
@@ -63,6 +125,7 @@
             <div class="clearfix"></div>
         </div>
     @endif
+
 @stop
 
 @section('left')
@@ -169,11 +232,11 @@
         <div class="icon-list text-link">
             @php $isLeader = (auth()->id() === $page->book->owned_by) || auth()->user()->hasSystemRole('admin'); @endphp
 
-            @if(userCan(\BookStack\Permissions\Permission::PageCreate, $page))
+            <!-- @if(userCan(\BookStack\Permissions\Permission::PageCreate, $page))
                 <a href="{{ $page->getUrl('/create-page') }}" data-shortcut="new" class="icon-list-item">
                     <span>@icon('add')</span><span>{{ trans('entities.pages_new') }}</span>
                 </a>
-            @endif
+            @endif -->
 
             <hr class="primary-background">
 
