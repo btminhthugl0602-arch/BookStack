@@ -314,7 +314,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/settings', [SettingControllers\SettingController::class, 'index'])->name('settings');
     Route::get('/settings/{category}', [SettingControllers\SettingController::class, 'category'])->name('settings.category');
     Route::post('/settings/{category}', [SettingControllers\SettingController::class, 'update']);
-});
+
+    // Route cho AI
+    Route::post('/ai/summarize', [BookStack\Http\Controllers\AiController::class, 'summarize'])->middleware('auth');
+    });
 
 // MFA routes
 Route::middleware('mfa-setup')->group(function () {
