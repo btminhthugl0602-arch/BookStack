@@ -20,7 +20,7 @@
             id="face-login-btn"
             type="button"
             class="button outline full-width">
-            🔐 Đăng nhập bằng khuôn mặt
+            Đăng nhập bằng khuôn mặt
         </button>
 
         <video

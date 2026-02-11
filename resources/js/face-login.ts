@@ -1,4 +1,4 @@
-console.log('Face login JS loaded ✅');
+console.log('Face login JS loaded');
 
 document.addEventListener('DOMContentLoaded', () => {
     const btn = document.getElementById('face-login-btn') as HTMLButtonElement | null;
@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isProcessing) return;
         isProcessing = true;
         btn.disabled = true;
-        btn.textContent = '⏳ Đang mở camera...';
+        btn.textContent = 'Đang mở camera...';
 
         try {
             // Yêu cầu quyền camera
@@ -32,14 +32,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 audio: false
             });
 
-            console.log('✅ Camera opened successfully');
+            console.log('Camera opened successfully');
             video.srcObject = stream;
             video.style.display = 'block';
 
             // Đợi video stream ổn định
             video.onloadedmetadata = () => {
                 console.log(`Camera resolution: ${video.videoWidth}x${video.videoHeight}`);
-                btn.textContent = '📸 Chụp ảnh...';
+                btn.textContent = 'Chụp ảnh...';
                 setTimeout(() => {
                     captureAndSend();
                 }, 800);
@@ -48,18 +48,18 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err: any) {
             isProcessing = false;
             btn.disabled = false;
-            btn.textContent = '🔐 Đăng nhập bằng khuôn mặt';
+            btn.textContent = 'Đăng nhập bằng khuôn mặt';
 
             console.error('Camera error:', err);
 
             if (err.name === 'NotAllowedError') {
-                alert('❌ Bạn chưa cấp quyền camera. Vui lòng kiểm tra cài đặt quyền của trình duyệt');
+                alert('Bạn chưa cấp quyền camera. Vui lòng kiểm tra cài đặt quyền của trình duyệt');
             } else if (err.name === 'NotFoundError') {
-                alert('❌ Không tìm thấy camera. Vui lòng kiểm tra kết nối');
+                alert('Không tìm thấy camera. Vui lòng kiểm tra kết nối');
             } else if (err.name === 'NotReadableError') {
-                alert('❌ Camera đang bị sử dụng bởi ứng dụng khác');
+                alert('Camera đang bị sử dụng bởi ứng dụng khác');
             } else {
-                alert(`❌ Lỗi camera: ${err.message}`);
+                alert(`Lỗi camera: ${err.message}`);
             }
         }
     });
@@ -91,14 +91,14 @@ document.addEventListener('DOMContentLoaded', () => {
             stream = null;
             video.style.display = 'none';
 
-            console.log('📸 Captured image, sending to server...');
+            console.log('Captured image, sending to server...');
 
             canvas.toBlob(
                 async (blob) => {
                     if (!blob) {
                         console.error('Failed to create blob');
                         resetButton();
-                        alert('❌ Lỗi xử lý ảnh');
+                        alert('Lỗi xử lý ảnh');
                         return;
                     }
 
@@ -109,7 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         'meta[name="csrf-token"]'
                     ) as HTMLMetaElement | null;
 
-                    btn.textContent = '🔍 Đang nhận diện...';
+                    btn.textContent = 'Đang nhận diện...';
 
                     try {
                         const res = await fetch('/login/face', {
@@ -122,7 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         console.log('Server response:', data);
 
                         if (res.ok && data.success) {
-                            btn.textContent = '✅ Nhận diện thành công!';
+                            btn.textContent = 'Nhận diện thành công';
                             setTimeout(() => {
                                 window.location.href = '/';
                             }, 500);
@@ -133,7 +133,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     } catch (err) {
                         console.error('Fetch error:', err);
                         resetButton();
-                        alert('❌ Lỗi gửi ảnh tới server');
+                        alert('Lỗi gửi ảnh tới server');
                     }
                 },
                 'image/jpeg',
@@ -143,24 +143,24 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) {
             console.error('Capture error:', err);
             resetButton();
-            alert('❌ Lỗi chụp ảnh');
+            alert('Lỗi chụp ảnh');
         }
     }
 
     function handleError(data: any, status: number) {
         resetButton();
-        let message = '❌ Lỗi không xác định';
+        let message = 'Lỗi không xác định';
 
         if (status === 422 && data.error === 'No face detected') {
-            message = '❌ Không phát hiện khuôn mặt. Vui lòng:\n- Đảm bảo ánh sáng tốt\n- Mặt rõ ràng, không bị che khuất\n- Thử lại';
+            message = 'Không phát hiện khuôn mặt. Vui lòng:\n- Đảm bảo ánh sáng tốt\n- Mặt rõ ràng, không bị che khuất\n- Thử lại';
         } else if (status === 401 && data.error === 'Face not recognized') {
-            message = '❌ Khuôn mặt không được nhận diện. Vui lòng đăng ký khuôn mặt trước';
+            message = 'Khuôn mặt không được nhận diện. Vui lòng đăng ký khuôn mặt trước';
         } else if (status === 401 && data.error === 'Low confidence') {
-            message = `❌ Độ tin cậy thấp (${data.confidence || 0}%). Vui lòng thử lại với ánh sáng tốt hơn`;
+            message = `Độ tin cậy thấp (${data.confidence || 0}%). Vui lòng thử lại với ánh sáng tốt hơn`;
         } else if (status === 404) {
-            message = '❌ Người dùng không tồn tại';
+            message = 'Người dùng không tồn tại';
         } else if (data.error) {
-            message = `❌ ${data.error}`;
+            message = `${data.error}`;
         }
 
         alert(message);
@@ -169,6 +169,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function resetButton() {
         isProcessing = false;
         btn.disabled = false;
-        btn.textContent = '🔐 Đăng nhập bằng khuôn mặt';
+        btn.textContent = 'Đăng nhập bằng khuôn mặt';
     }
 });

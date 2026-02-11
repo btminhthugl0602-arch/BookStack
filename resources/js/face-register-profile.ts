@@ -1,24 +1,30 @@
-console.log('Face register profile JS loaded ✅');
+console.log('Face register profile JS loaded');
 
 document.addEventListener('DOMContentLoaded', () => {
-    const btn = document.getElementById('face-register-btn') as HTMLButtonElement | null;
+    const updateBtn = document.getElementById('face-update-btn') as HTMLButtonElement | null;
+    const deleteBtn = document.getElementById('face-delete-btn') as HTMLButtonElement | null;
     const video = document.getElementById('face-register-video') as HTMLVideoElement | null;
     const canvas = document.getElementById('face-register-canvas') as HTMLCanvasElement | null;
+    const statusText = document.getElementById('face-status-text') as HTMLParagraphElement | null;
 
-    // Nếu không phải trang profile, thoát
-    if (!btn || !video || !canvas) {
+    if (!updateBtn || !deleteBtn || !video || !canvas) {
         console.log('Face register profile page not detected, skipping initialization');
         return;
     }
 
     let stream: MediaStream | null = null;
     let isProcessing = false;
+    let currentAction: 'update' | 'delete' | null = null;
 
-    btn.addEventListener('click', async () => {
+    updateBtn.addEventListener('click', () => startAction('update'));
+    deleteBtn.addEventListener('click', () => startAction('delete'));
+
+    async function startAction(action: 'update' | 'delete') {
         if (isProcessing) return;
         isProcessing = true;
-        btn.disabled = true;
-        btn.textContent = '⏳ Đang mở camera...';
+        currentAction = action;
+        setButtonsState(true, action === 'update' ? 'Đang mở camera...' : 'Đang mở camera...');
+        setStatus('Đang mở camera...');
 
         try {
             stream = await navigator.mediaDevices.getUserMedia({
@@ -30,13 +36,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 audio: false
             });
 
-            console.log('✅ Camera opened for face registration');
+            console.log('Camera opened for face action');
             video.srcObject = stream;
             video.style.display = 'block';
 
             video.onloadedmetadata = () => {
                 console.log(`Camera resolution: ${video.videoWidth}x${video.videoHeight}`);
-                btn.textContent = '📸 Chụp ảnh...';
+                setButtonsState(true, 'Chụp ảnh...');
+                setStatus('Đang chụp ảnh...');
                 setTimeout(() => {
                     captureAndSend();
                 }, 800);
@@ -44,32 +51,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (err: any) {
             isProcessing = false;
-            btn.disabled = false;
-            btn.textContent = '📸 Đăng ký khuôn mặt';
+            resetButtons();
+            setStatus('Không thể mở camera');
 
             console.error('Camera error:', err);
 
             if (err.name === 'NotAllowedError') {
-                alert('❌ Bạn chưa cấp quyền camera. Vui lòng kiểm tra cài đặt quyền của trình duyệt');
+                alert('Bạn chưa cấp quyền camera. Vui lòng kiểm tra cài đặt quyền của trình duyệt');
             } else if (err.name === 'NotFoundError') {
-                alert('❌ Không tìm thấy camera. Vui lòng kiểm tra kết nối');
+                alert('Không tìm thấy camera. Vui lòng kiểm tra kết nối');
             } else if (err.name === 'NotReadableError') {
-                alert('❌ Camera đang bị sử dụng bởi ứng dụng khác');
+                alert('Camera đang bị sử dụng bởi ứng dụng khác');
             } else {
-                alert(`❌ Lỗi camera: ${err.message}`);
+                alert(`Lỗi camera: ${err.message}`);
             }
         }
-    });
+    }
 
     async function captureAndSend() {
-        if (!stream || !video || !canvas) {
-            resetButton();
+        if (!stream || !video || !canvas || !currentAction) {
+            resetButtons();
             return;
         }
 
         const ctx = canvas.getContext('2d');
         if (!ctx) {
-            resetButton();
+            resetButtons();
             return;
         }
 
@@ -77,7 +84,6 @@ document.addEventListener('DOMContentLoaded', () => {
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
 
-            // Mirror image
             ctx.scale(-1, 1);
             ctx.drawImage(video, -video.videoWidth, 0);
             ctx.scale(-1, 1);
@@ -86,49 +92,32 @@ document.addEventListener('DOMContentLoaded', () => {
             stream = null;
             video.style.display = 'none';
 
-            console.log('📸 Captured image, sending to server...');
+            console.log('Captured image, sending to server...');
+            setStatus('Đang xác thực...');
 
             canvas.toBlob(
                 async (blob) => {
                     if (!blob) {
-                        resetButton();
-                        alert('❌ Lỗi xử lý ảnh');
+                        resetButtons();
+                        alert('Lỗi xử lý ảnh');
                         return;
                     }
-
-                    const formData = new FormData();
-                    formData.append('image', blob, 'face.jpg');
 
                     const csrf = document.querySelector(
                         'meta[name="csrf-token"]'
                     ) as HTMLMetaElement | null;
 
-                    btn.textContent = '🔍 Đang xử lý...';
+                    const headers = csrf ? { 'X-CSRF-TOKEN': csrf.content } : {};
 
-                    try {
-                        const res = await fetch('/user/face/register', {
-                            method: 'POST',
-                            headers: csrf ? { 'X-CSRF-TOKEN': csrf.content } : {},
-                            body: formData
-                        });
-
-                        const data = await res.json();
-                        console.log('Face registration response:', data);
-
-                        if (res.ok && data.success) {
-                            btn.textContent = '✅ Đăng ký thành công!';
-                            alert('✅ Khuôn mặt của bạn đã được đăng ký thành công!\n\nGiờ bạn có thể đăng nhập bằng khuôn mặt');
-                            setTimeout(() => {
-                                location.reload();
-                            }, 1500);
-                        } else {
-                            handleError(data, res.status);
+                    if (currentAction === 'update') {
+                        const verified = await verifyFace(blob, headers);
+                        if (!verified) {
+                            resetButtons();
+                            return;
                         }
-
-                    } catch (err) {
-                        console.error('Fetch error:', err);
-                        resetButton();
-                        alert('❌ Lỗi gửi ảnh tới server');
+                        await registerFace(blob, headers);
+                    } else {
+                        await deleteFace(blob, headers);
                     }
                 },
                 'image/jpeg',
@@ -137,29 +126,142 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (err) {
             console.error('Capture error:', err);
-            resetButton();
-            alert('❌ Lỗi chụp ảnh');
+            resetButtons();
+            alert('Lỗi chụp ảnh');
+        }
+    }
+
+    async function verifyFace(blob: Blob, headers: Record<string, string>) {
+        try {
+            const formData = new FormData();
+            formData.append('image', blob, 'face.jpg');
+            setButtonsState(true, 'Đang xác thực...');
+            const res = await fetch('/user/face/verify', {
+                method: 'POST',
+                headers,
+                body: formData
+            });
+
+            const data = await res.json();
+            if (res.ok && data.success) {
+                setStatus('Xác thực thành công');
+                return true;
+            }
+
+            handleError(data, res.status);
+            return false;
+        } catch (err) {
+            console.error('Verify error:', err);
+            resetButtons();
+            alert('Lỗi xác thực');
+            return false;
+        }
+    }
+
+    async function registerFace(blob: Blob, headers: Record<string, string>) {
+        try {
+            const formData = new FormData();
+            formData.append('image', blob, 'face.jpg');
+            setButtonsState(true, 'Đang cập nhật...');
+
+            const res = await fetch('/user/face/register', {
+                method: 'POST',
+                headers,
+                body: formData
+            });
+
+            const data = await res.json();
+            console.log('Face registration response:', data);
+
+            if (res.ok && data.success) {
+                setButtonsState(true, 'Cập nhật thành công');
+                setStatus('Khuôn mặt đã được cập nhật thành công.');
+                setTimeout(() => {
+                    location.reload();
+                }, 1200);
+            } else {
+                handleError(data, res.status);
+            }
+
+        } catch (err) {
+            console.error('Register error:', err);
+            resetButtons();
+            alert('Lỗi gửi ảnh tới server');
+        }
+    }
+
+    async function deleteFace(blob: Blob, headers: Record<string, string>) {
+        try {
+            const formData = new FormData();
+            formData.append('image', blob, 'face.jpg');
+            setButtonsState(true, 'Đang xóa...');
+
+            const res = await fetch('/user/face/delete', {
+                method: 'POST',
+                headers,
+                body: formData
+            });
+
+            const data = await res.json();
+            console.log('Face delete response:', data);
+
+            if (res.ok && data.success) {
+                setButtonsState(true, 'Đã xóa khuôn mặt');
+                setStatus('Khuôn mặt đã được xóa.');
+                setTimeout(() => {
+                    location.reload();
+                }, 1200);
+            } else {
+                handleError(data, res.status);
+            }
+
+        } catch (err) {
+            console.error('Delete error:', err);
+            resetButtons();
+            alert('Lỗi gửi yêu cầu xóa');
         }
     }
 
     function handleError(data: any, status: number) {
-        resetButton();
-        let message = '❌ Lỗi không xác định';
+        resetButtons();
+        let message = 'Lỗi không xác định';
 
         if (status === 422 && data.error === 'No face detected') {
-            message = '❌ Không phát hiện khuôn mặt. Vui lòng:\n- Đảm bảo ánh sáng tốt\n- Mặt rõ ràng, không bị che khuất\n- Thử lại';
+            message = 'Không phát hiện khuôn mặt. Vui lòng:\n- Đảm bảo ánh sáng tốt\n- Mặt rõ ràng, không bị che khuất\n- Thử lại';
+        } else if (status === 401) {
+            message = data.error || 'Xác thực khuôn mặt không thành công';
         } else if (status === 500) {
-            message = `❌ Lỗi server: ${data.error || 'Unknown error'}`;
+            message = `Lỗi server: ${data.error || 'Unknown error'}`;
         } else if (data.error) {
-            message = `❌ ${data.error}`;
+            message = `${data.error}`;
         }
 
         alert(message);
+        setStatus(message);
     }
 
-    function resetButton() {
+    function setButtonsState(disabled: boolean, text: string) {
+        updateBtn.disabled = disabled;
+        deleteBtn.disabled = disabled;
+        if (currentAction === 'update') {
+            updateBtn.textContent = text;
+        } else if (currentAction === 'delete') {
+            deleteBtn.textContent = text;
+        }
+    }
+
+    function resetButtons() {
         isProcessing = false;
-        btn.disabled = false;
-        btn.textContent = '📸 Đăng ký khuôn mặt';
+        currentAction = null;
+        updateBtn.disabled = false;
+        deleteBtn.disabled = false;
+        updateBtn.textContent = 'Cập nhật khuôn mặt';
+        deleteBtn.textContent = 'Xóa khuôn mặt';
+    }
+
+    function setStatus(text: string) {
+        if (statusText) {
+            statusText.textContent = text;
+        }
     }
 });

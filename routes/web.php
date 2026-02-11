@@ -24,7 +24,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use BookStack\Http\Controllers\FaceLoginController;
 use BookStack\Http\Controllers\FaceRegisterController;
-use BookStack\Http\Controllers\FaceUploadController;
 
 // Status & Meta routes
 Route::get('/status', [SettingControllers\StatusController::class, 'show']);
@@ -441,5 +440,7 @@ Route::middleware(['web', 'auth'])->group(function () {
 Route::post('/login/face', [FaceLoginController::class, 'login']); // ← THÊM DÒNG NÀY
 Route::post('/user/face/register', [FaceRegisterController::class, 'register'])
     ->middleware('auth');
-Route::post('/user/face/upload-register', [FaceUploadController::class, 'uploadRegister'])
+Route::post('/user/face/delete', [FaceRegisterController::class, 'delete'])
+    ->middleware('auth');
+Route::post('/user/face/verify', [FaceRegisterController::class, 'verify'])
     ->middleware('auth');
