@@ -13,6 +13,8 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
+use BookStack\Activity\ActivityType;
+
 /**
  * @property string $type
  * @property User   $user
@@ -55,9 +57,16 @@ class Activity extends Model
     /**
      * Returns text from the language files, Looks up by using the activity key.
      */
-    public function getText(): string
+    /**
+     * Get the text for the activity.
+     */
+    public function getText()
     {
-        return trans('activities.' . $this->type);
+        // SỬA: Biến $this->detail bây giờ chính là tên người dùng (VD: "Nguyễn Văn A")
+        // Chúng ta truyền thẳng nó vào file ngôn ngữ
+        return trans('activities.' . $this->type, [
+            'detail' => $this->detail ?? ''
+        ]);
     }
 
     /**
@@ -73,8 +82,25 @@ class Activity extends Model
     /**
      * Checks if another Activity matches the general information of another.
      */
-    public function isSimilarTo(self $activityB): bool
-    {
-        return [$this->type, $this->loggable_type, $this->loggable_id] === [$activityB->type, $activityB->loggable_type, $activityB->loggable_id];
+    
+public function isSimilarTo(self $activityB): bool
+{
+    //  KHÔNG gộp các activity đặc biệt
+    if (in_array($this->type, [
+        ActivityType::BOOK_MEMBER_ADDED,
+        ActivityType::ENTITY_APPROVED,
+    ])) {
+        return false;
     }
+
+    return [
+        $this->type,
+        $this->loggable_type,
+        $this->loggable_id
+    ] === [
+        $activityB->type,
+        $activityB->loggable_type,
+        $activityB->loggable_id
+    ];
+}
 }

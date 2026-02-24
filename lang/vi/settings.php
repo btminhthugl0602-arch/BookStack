@@ -75,8 +75,8 @@ return [
     'reg_confirm_restrict_domain_placeholder' => 'Không có giới hạn nào được thiết lập',
 
     // Sorting Settings
-    'sorting' => 'Lists & Sorting',
-    'sorting_book_default' => 'Default Book Sort Rule',
+    'sorting' => 'Danh sách & Sắp xếp',
+    'sorting_book_default' => 'Quy tắc sắp xếp sách mặc định',
     'sorting_book_default_desc' => 'Chọn quy tắc sắp xếp mặc định để áp dụng cho sách mới. Điều này sẽ không ảnh hưởng đến các sách hiện có và có thể được ghi đè cho từng sách.',
     'sorting_rules' => 'Quy tắc sắp xếp',
     'sorting_rules_desc' => 'Đây là các thao tác sắp xếp được xác định trước có thể được áp dụng cho nội dung trong hệ thống.',
@@ -103,8 +103,8 @@ return [
     'sort_rule_op_updated_date' => 'Ngày cập nhật',
     'sort_rule_op_chapters_first' => 'Chương trước',
     'sort_rule_op_chapters_last' => 'Chương sau',
-    'sorting_page_limits' => 'Per-Page Display Limits',
-    'sorting_page_limits_desc' => 'Set how many items to show per-page in various lists within the system. Typically a lower amount will be more performant, while a higher amount avoids the need to click through multiple pages. Using an even multiple of 3 (18, 24, 30, etc...) is recommended.',
+    'sorting_page_limits' => 'Giới hạn hiển thị trên mỗi trang',
+    'sorting_page_limits_desc' => 'Thiết lập số lượng mục hiển thị trên mỗi trang trong các danh sách khác nhau trong hệ thống. Thông thường, số lượng ít hơn sẽ cho hiệu suất tốt hơn, trong khi số lượng nhiều hơn sẽ tránh việc phải nhấp chuột qua nhiều trang. Nên sử dụng bội số chẵn của 3 (18, 24, 30, v.v...).',
 
     // Maintenance settings
     'maint' => 'Bảo trì',

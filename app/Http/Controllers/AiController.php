@@ -2,60 +2,81 @@
 
 namespace BookStack\Http\Controllers;
 
-use BookStack\Entities\Models\Page;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
-// 👇 Dòng quan trọng mới thêm: Dùng Controller gốc của Laravel
-use Illuminate\Routing\Controller as BaseController; 
+use Illuminate\Support\Facades\Log;
+use BookStack\Entities\Queries\PageQueries;
+use BookStack\Http\Controller;
 
-class AiController extends BaseController
+class AiController extends Controller
 {
-    /**
-     * Hàm xử lý tóm tắt nội dung bằng AI Gemini 2.5
-     */
-    public function summarize(Request $request, $pageId)
+    protected PageQueries $pageQueries;
+
+    public function __construct(PageQueries $pageQueries)
     {
-        // 1. Tìm trang bài viết theo ID
-        $page = Page::findOrFail($pageId);
+        $this->pageQueries = $pageQueries;
+    }
 
-        // 2. Lấy nội dung HTML và lọc bỏ thẻ để lấy chữ thôi
-        $content = strip_tags($page->html);
-        
-        // Cắt bớt nếu dài quá 
-        $content = mb_substr($content, 0, 50000); 
-
-        // 3. Chuẩn bị câu lệnh (Prompt)
-        $prompt = "Bạn là trợ lý ảo. Hãy tóm tắt văn bản sau thành 3-5 gạch đầu dòng quan trọng nhất:\n\n" . $content;
-
-        // 4. Gọi API Google Gemini
-        $apiKey = env('GEMINI_API_KEY');
-        
+    public function summarize(Request $request)
+    {
         try {
-            $response = Http::withHeaders([
+            // --- BƯỚC 1: LẤY NỘI DUNG TRANG (Phần bạn bị thiếu) ---
+            $pageId = $request->input('page_id');
+            if (!$pageId) {
+                return response()->json(['success' => false, 'message' => 'Không tìm thấy ID trang.']);
+            }
+
+            // Tìm trang trong CSDL
+            $page = $this->pageQueries->findVisibleByIdOrFail($pageId);
+            
+            // Lấy text thuần, cắt bớt để tránh quá tải token (giới hạn 8000 ký tự)
+            $content = substr(strip_tags($page->html), 0, 8000); 
+
+            // --- BƯỚC 2: CHUẨN BỊ GỌI AI ---
+            // Dọn dẹp API Key
+            $apiKey = trim(env('GEMINI_API_KEY')); 
+            if (!$apiKey) {
+                 return response()->json(['success' => false, 'message' => 'Chưa cấu hình API Key trong .env']);
+            }
+
+            $apiKey = trim(env('GEMINI_API_KEY')); 
+            
+            // SỬA DÒNG NÀY: Chuyển sang v1beta và gemini-2.5-flash (Chuẩn mới nhất)
+            $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" . $apiKey;
+
+            $prompt = "Bạn là trợ lý ảo. Hãy tóm tắt nội dung sau thành 3 gạch đầu dòng ngắn gọn bằng tiếng Việt:\n\n" . $content;
+            // --- BƯỚC 3: GỌI API ---
+            $response = Http::withoutVerifying()->withHeaders([
                 'Content-Type' => 'application/json',
-            ])->post("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={$apiKey}", [
+            ])->post($url, [
                 'contents' => [
-                    [
-                        'parts' => [
-                            ['text' => $prompt]
-                        ]
-                    ]
+                    ['parts' => [['text' => $prompt]]]
                 ]
             ]);
 
-            $result = $response->json();
-            $summaryText = $result['candidates'][0]['content']['parts'][0]['text'] ?? 'Không có kết quả trả về từ AI.';
-            
-            return response()->json([
-                'status' => 'success',
-                'summary' => $summaryText
-            ]);
+            // --- BƯỚC 4: XỬ LÝ KẾT QUẢ ---
+            if ($response->successful()) {
+                $data = $response->json();
+                $summary = $data['candidates'][0]['content']['parts'][0]['text'] ?? 'AI không trả lời được.';
+                
+                return response()->json([
+                    'success' => true,
+                    'summary' => $summary
+                ]);
+            } else {
+                Log::error('Gemini API Error: ' . $response->body());
+                return response()->json([
+                    'success' => false, 
+                    'message' => 'Lỗi Google: ' . $response->status()
+                ]);
+            }
 
         } catch (\Exception $e) {
+            Log::error('AiController Error: ' . $e->getMessage());
             return response()->json([
-                'status' => 'error',
-                'message' => 'Lỗi: ' . $e->getMessage()
-            ], 500);
+                'success' => false, 
+                'message' => 'Lỗi Server: ' . $e->getMessage()
+            ]);
         }
     }
 }
