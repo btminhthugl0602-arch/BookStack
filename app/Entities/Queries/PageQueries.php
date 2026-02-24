@@ -127,4 +127,17 @@ class PageQueries implements ProvidesEntityQueries
                 ->whereColumn('books.id', '=', 'entities.book_id');
         }]);
     }
+    public function findVisibleBySlugOrFail(string $pageSlug, string $bookSlug): Page
+{
+    $page = $this->start()->where('slug', '=', $pageSlug)
+        ->whereHas('book', function ($query) use ($bookSlug) {
+            $query->where('slug', '=', $bookSlug);
+        })->first();
+
+    if (!$page) {
+        throw new \BookStack\Exceptions\NotFoundException(trans('errors.page_not_found'));
+    }
+
+    return $page;
+}
 }

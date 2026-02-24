@@ -19,7 +19,7 @@
         <div class="card content-wrap auto-height">
             <h1 class="list-heading">{{ $page->draft ? trans('entities.pages_delete_draft') : trans('entities.pages_delete') }}</h1>
 
-            @if($usedAsTemplate)
+            @if($usedAsTemplate ?? false)
                 <p class="text-warn">{{ trans('entities.pages_delete_warning_template') }}</p>
             @endif
 

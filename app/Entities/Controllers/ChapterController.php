@@ -170,18 +170,49 @@ class ChapterController extends Controller
         $chapter = $this->queries->findVisibleBySlugsOrFail($bookSlug, $chapterSlug); 
         return view('chapters.edit', ['book' => $chapter->book, 'chapter' => $chapter]); 
     }
-    public function destroy(string $bookSlug, string $chapterSlug)
-    {
-        $chapter = $this->queries->findVisibleBySlugOrFail($chapterSlug);
-        
-        // 🔒 CHẶN: Kiểm tra chủ của CUỐN SÁCH cha
-        $book = $chapter->book;
-        if (auth()->id() != $book->owned_by && !auth()->user()->hasSystemRole('admin')) {
-             $this->showPermissionError();
-        }
+ public function showDelete(string $bookSlug, string $chapterSlug)
+{
+    $chapter = $this->queries->findVisibleBySlugsOrFail($bookSlug, $chapterSlug);
+    $book = $chapter->book;
+    $user = auth()->user();
 
-        $this->checkOwnablePermission(Permission::ChapterDelete, $chapter);
-        $this->chapterRepo->destroy($chapter);
-        return redirect($chapter->getBook()->getUrl());
+    $isAdmin = $user->hasSystemRole('admin');
+    $isBookOwner = (int)$user->id === (int)$book->owned_by;
+    $isAuthor = (int)$user->id === (int)$chapter->created_by;
+
+    // Cho phép Admin, Sếp hoặc Tác giả xem trang xóa
+    if (!$isAdmin && !$isBookOwner && !$isAuthor) {
+        $this->checkOwnablePermission('chapter-delete', $chapter);
     }
+
+    $this->setPageTitle(trans('entities.chapters_delete_named', ['chapterName' => $chapter->getShortName()]));
+
+    return view('chapters.delete', [
+        'book'    => $book,
+        'chapter' => $chapter,
+        'current' => $chapter,
+    ]);
+}
+    public function destroy(string $bookSlug, string $chapterSlug)
+{
+    // 1. Tìm chương (Nên dùng Slugs để chính xác tuyệt đối)
+    $chapter = $this->queries->findVisibleBySlugsOrFail($bookSlug, $chapterSlug);
+    $book = $chapter->book;
+    $user = auth()->user();
+
+    // 2. Định nghĩa các điều kiện "Làn ưu tiên"
+    $isAdmin = $user->hasSystemRole('admin');
+    $isBookOwner = (int)$user->id === (int)$book->owned_by; // Sếp (Chủ dự án)
+    $isAuthor = (int)$user->id === (int)$chapter->created_by; // Người đăng (Tác giả chương)
+
+    // 3. Logic kiểm tra: Nếu KHÔNG thuộc nhóm ưu tiên thì mới check quyền Role
+    if (!$isAdmin && !$isBookOwner && !$isAuthor) {
+        $this->checkOwnablePermission(Permission::ChapterDelete, $chapter);
+    }
+
+    // 4. Thực hiện xóa
+    $this->chapterRepo->destroy($chapter);
+
+    return redirect($book->getUrl());
+}
 }

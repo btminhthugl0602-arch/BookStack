@@ -324,16 +324,17 @@ class PageRepo
      * Get a page via the book slug and page slug.
      */
     public function getBySlug(string $bookSlug, string $pageSlug): Page
-    {
-        $page = $this->page->where('slug', '=', $pageSlug)
-            ->whereHas('book', function ($query) use ($bookSlug) {
-                $query->where('slug', '=', $bookSlug);
-            })->first();
+{
+    // Sử dụng Page::query() thay vì $this->page
+    $page = \BookStack\Entities\Models\Page::query()->where('slug', '=', $pageSlug)
+        ->whereHas('book', function ($query) use ($bookSlug) {
+            $query->where('slug', '=', $bookSlug);
+        })->first();
 
-        if ($page === null) {
-            throw new NotFoundException(trans('errors.page_not_found'));
-        }
-
-        return $page;
+    if ($page === null) {
+        throw new \BookStack\Exceptions\NotFoundException(trans('errors.page_not_found'));
     }
+
+    return $page;
+}
 }
