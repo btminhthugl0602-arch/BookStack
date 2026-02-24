@@ -431,6 +431,25 @@ Route::middleware(['web', 'auth'])->group(function () {
                     'updated_at' => now()
                 ]
             );
+            // Ghi Activity để kích hoạt hệ thống gửi Thông báo
+            try {
+                $model = null;
+                if ($type === 'page') {
+                    $model = \BookStack\Entities\Models\Page::find($id);
+                } elseif ($type === 'chapter') {
+                    $model = \BookStack\Entities\Models\Chapter::find($id);
+                } elseif ($type === 'book') {
+                    $model = \BookStack\Entities\Models\Book::find($id);
+                }
+
+                if ($model) {
+                    // Lệnh này phát tín hiệu gọi các file Notification của bạn chạy
+                    \BookStack\Facades\Activity::add('entity_approved', $model, $model);
+                }
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error("Lỗi gửi thông báo duyệt bài: " . $e->getMessage());
+            }
+
             return back()->with('success', 'Đã duyệt thành công!');
         }
 
