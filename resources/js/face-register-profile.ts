@@ -1,26 +1,37 @@
 console.log('Face register profile JS loaded');
 
 document.addEventListener('DOMContentLoaded', () => {
-    const updateBtn = document.getElementById('face-update-btn') as HTMLButtonElement | null;
-    const deleteBtn = document.getElementById('face-delete-btn') as HTMLButtonElement | null;
-    const video = document.getElementById('face-register-video') as HTMLVideoElement | null;
-    const canvas = document.getElementById('face-register-canvas') as HTMLCanvasElement | null;
+    const updateBtnEl = document.getElementById('face-update-btn') as HTMLButtonElement | null;
+    const deleteBtnEl = document.getElementById('face-delete-btn') as HTMLButtonElement | null;
+    const videoEl = document.getElementById('face-register-video') as HTMLVideoElement | null;
+    const canvasEl = document.getElementById('face-register-canvas') as HTMLCanvasElement | null;
     const statusText = document.getElementById('face-status-text') as HTMLParagraphElement | null;
 
-    if (!updateBtn || !deleteBtn || !video || !canvas) {
+    if (!updateBtnEl || !deleteBtnEl || !videoEl || !canvasEl) {
         console.log('Face register profile page not detected, skipping initialization');
         return;
     }
 
+    const updateBtn = updateBtnEl;
+    const deleteBtn = deleteBtnEl;
+    const video = videoEl;
+    const canvas = canvasEl;
+
     let stream: MediaStream | null = null;
     let isProcessing = false;
     let currentAction: 'update' | 'delete' | null = null;
+    let hasExistingFace = updateBtn.dataset.hasFace === 'true';
 
     updateBtn.addEventListener('click', () => startAction('update'));
     deleteBtn.addEventListener('click', () => startAction('delete'));
 
     async function startAction(action: 'update' | 'delete') {
         if (isProcessing) return;
+        if (action === 'delete' && !hasExistingFace) {
+            setStatus('Bạn chưa đăng ký khuôn mặt để xóa.');
+            resetButtons();
+            return;
+        }
         isProcessing = true;
         currentAction = action;
         setButtonsState(true, action === 'update' ? 'Đang mở camera...' : 'Đang mở camera...');
@@ -93,7 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
             video.style.display = 'none';
 
             console.log('Captured image, sending to server...');
-            setStatus('Đang xác thực...');
+            setStatus(currentAction === 'update' && hasExistingFace ? 'Đang xác thực...' : 'Đang xử lý...');
 
             canvas.toBlob(
                 async (blob) => {
@@ -107,17 +118,39 @@ document.addEventListener('DOMContentLoaded', () => {
                         'meta[name="csrf-token"]'
                     ) as HTMLMetaElement | null;
 
-                    const headers = csrf ? { 'X-CSRF-TOKEN': csrf.content } : {};
+                    const headers: Record<string, string> = csrf
+                        ? { 'X-CSRF-TOKEN': csrf.content }
+                        : {};
 
                     if (currentAction === 'update') {
-                        const verified = await verifyFace(blob, headers);
-                        if (!verified) {
+                        let verifyResult: 'ok' | 'no-face' | 'fail' = 'ok';
+                        if (hasExistingFace) {
+                            verifyResult = await verifyFace(blob, headers, 'update');
+                            if (verifyResult === 'fail') {
+                                resetButtons();
+                                return;
+                            }
+                        }
+
+                        if (verifyResult === 'no-face') {
+                            hasExistingFace = false;
+                        }
+
+                        const registered = await registerFace(blob, headers);
+                        if (registered) {
+                            hasExistingFace = true;
+                        }
+                    } else {
+                        const verifyResult = await verifyFace(blob, headers, 'delete');
+                        if (verifyResult !== 'ok') {
                             resetButtons();
                             return;
                         }
-                        await registerFace(blob, headers);
-                    } else {
-                        await deleteFace(blob, headers);
+
+                        const deleted = await deleteFace(headers);
+                        if (deleted) {
+                            hasExistingFace = false;
+                        }
                     }
                 },
                 'image/jpeg',
@@ -131,30 +164,41 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    async function verifyFace(blob: Blob, headers: Record<string, string>) {
+    async function verifyFace(
+        blob: Blob,
+        headers: Record<string, string>,
+        purpose: 'update' | 'delete'
+    ) {
         try {
             const formData = new FormData();
             formData.append('image', blob, 'face.jpg');
+            formData.append('purpose', purpose);
             setButtonsState(true, 'Đang xác thực...');
             const res = await fetch('/user/face/verify', {
                 method: 'POST',
                 headers,
+                credentials: 'same-origin',
                 body: formData
             });
 
-            const data = await res.json();
+            const data = await parseJsonSafe(res);
             if (res.ok && data.success) {
                 setStatus('Xác thực thành công');
-                return true;
+                return 'ok' as const;
+            }
+
+            if (res.status === 400 && data.error === 'No registered face') {
+                setStatus('Chưa có khuôn mặt, sẽ đăng ký mới.');
+                return 'no-face' as const;
             }
 
             handleError(data, res.status);
-            return false;
+            return 'fail' as const;
         } catch (err) {
             console.error('Verify error:', err);
             resetButtons();
             alert('Lỗi xác thực');
-            return false;
+            return 'fail' as const;
         }
     }
 
@@ -167,10 +211,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch('/user/face/register', {
                 method: 'POST',
                 headers,
+                credentials: 'same-origin',
                 body: formData
             });
 
-            const data = await res.json();
+            const data = await parseJsonSafe(res);
             console.log('Face registration response:', data);
 
             if (res.ok && data.success) {
@@ -179,6 +224,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 setTimeout(() => {
                     location.reload();
                 }, 1200);
+                return true;
             } else {
                 handleError(data, res.status);
             }
@@ -188,21 +234,21 @@ document.addEventListener('DOMContentLoaded', () => {
             resetButtons();
             alert('Lỗi gửi ảnh tới server');
         }
+
+        return false;
     }
 
-    async function deleteFace(blob: Blob, headers: Record<string, string>) {
+    async function deleteFace(headers: Record<string, string>) {
         try {
-            const formData = new FormData();
-            formData.append('image', blob, 'face.jpg');
             setButtonsState(true, 'Đang xóa...');
 
             const res = await fetch('/user/face/delete', {
                 method: 'POST',
                 headers,
-                body: formData
+                credentials: 'same-origin'
             });
 
-            const data = await res.json();
+            const data = await parseJsonSafe(res);
             console.log('Face delete response:', data);
 
             if (res.ok && data.success) {
@@ -211,6 +257,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 setTimeout(() => {
                     location.reload();
                 }, 1200);
+                return true;
             } else {
                 handleError(data, res.status);
             }
@@ -219,6 +266,21 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Delete error:', err);
             resetButtons();
             alert('Lỗi gửi yêu cầu xóa');
+        }
+
+        return false;
+    }
+
+    async function parseJsonSafe(res: Response) {
+        const contentType = res.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+            return {} as any;
+        }
+
+        try {
+            return await res.json();
+        } catch {
+            return {} as any;
         }
     }
 
@@ -230,6 +292,8 @@ document.addEventListener('DOMContentLoaded', () => {
             message = 'Không phát hiện khuôn mặt. Vui lòng:\n- Đảm bảo ánh sáng tốt\n- Mặt rõ ràng, không bị che khuất\n- Thử lại';
         } else if (status === 401) {
             message = data.error || 'Xác thực khuôn mặt không thành công';
+        } else if (status === 503 || status === 504) {
+            message = data.error || 'Dịch vụ xác thực khuôn mặt đang tạm thời quá tải, vui lòng thử lại sau ít phút.';
         } else if (status === 500) {
             message = `Lỗi server: ${data.error || 'Unknown error'}`;
         } else if (data.error) {

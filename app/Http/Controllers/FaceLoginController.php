@@ -3,6 +3,7 @@
 namespace BookStack\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 use BookStack\Users\Models\User;
@@ -127,6 +128,14 @@ class FaceLoginController extends BaseController
                 'user_id' => $matchedUser->id,
             ]);
 
+        } catch (ConnectionException $e) {
+            \Log::warning('Face login timeout while calling Face++', [
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'error' => 'Face verification service is temporarily unavailable. Please try again in a moment.'
+            ], 503);
         } catch (\Exception $e) {
             \Log::error('Face login exception', [
                 'error' => $e->getMessage(),
@@ -134,7 +143,7 @@ class FaceLoginController extends BaseController
             ]);
 
             return response()->json([
-                'error' => 'Server error: ' . $e->getMessage()
+                'error' => 'Server error while logging in with face data'
             ], 500);
         }
     }

@@ -90,7 +90,8 @@
                 <button
                     id="face-update-btn"
                     type="button"
-                    class="button outline">
+                    class="button outline"
+                    data-has-face="{{ user()->face_token ? 'true' : 'false' }}">
                     Cập nhật khuôn mặt
                 </button>
                 <button

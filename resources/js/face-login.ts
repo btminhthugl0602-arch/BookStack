@@ -1,15 +1,19 @@
 console.log('Face login JS loaded');
 
 document.addEventListener('DOMContentLoaded', () => {
-    const btn = document.getElementById('face-login-btn') as HTMLButtonElement | null;
-    const video = document.getElementById('face-video') as HTMLVideoElement | null;
-    const canvas = document.getElementById('face-canvas') as HTMLCanvasElement | null;
+    const btnEl = document.getElementById('face-login-btn') as HTMLButtonElement | null;
+    const videoEl = document.getElementById('face-video') as HTMLVideoElement | null;
+    const canvasEl = document.getElementById('face-canvas') as HTMLCanvasElement | null;
 
     // Nếu không phải trang login, thoát
-    if (!btn || !video || !canvas) {
+    if (!btnEl || !videoEl || !canvasEl) {
         console.log('Face login page not detected, skipping initialization');
         return;
     }
+
+    const btn = btnEl;
+    const video = videoEl;
+    const canvas = canvasEl;
 
     let stream: MediaStream | null = null;
     let isProcessing = false;
@@ -157,6 +161,8 @@ document.addEventListener('DOMContentLoaded', () => {
             message = 'Khuôn mặt không được nhận diện. Vui lòng đăng ký khuôn mặt trước';
         } else if (status === 401 && data.error === 'Low confidence') {
             message = `Độ tin cậy thấp (${data.confidence || 0}%). Vui lòng thử lại với ánh sáng tốt hơn`;
+        } else if (status === 503 || status === 504) {
+            message = data.error || 'Dịch vụ xác thực khuôn mặt đang tạm thời quá tải, vui lòng thử lại sau ít phút.';
         } else if (status === 404) {
             message = 'Người dùng không tồn tại';
         } else if (data.error) {

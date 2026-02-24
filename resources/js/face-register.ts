@@ -1,14 +1,18 @@
 console.log('Face register JS loaded ✅');
 
 document.addEventListener('DOMContentLoaded', () => {
-    const btn = document.getElementById('face-register-btn') as HTMLButtonElement | null;
-    const video = document.getElementById('face-register-video') as HTMLVideoElement | null;
-    const canvas = document.getElementById('face-register-canvas') as HTMLCanvasElement | null;
+    const btnEl = document.getElementById('face-register-btn') as HTMLButtonElement | null;
+    const videoEl = document.getElementById('face-register-video') as HTMLVideoElement | null;
+    const canvasEl = document.getElementById('face-register-canvas') as HTMLCanvasElement | null;
 
-    if (!btn || !video || !canvas) {
+    if (!btnEl || !videoEl || !canvasEl) {
         console.warn('Face register elements not found');
         return;
     }
+
+    const btn = btnEl;
+    const video = videoEl;
+    const canvas = canvasEl;
 
     let stream: MediaStream | null = null;
     let isProcessing = false;
@@ -147,6 +151,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (status === 422 && data.error === 'No face detected') {
             message = '❌ Không phát hiện khuôn mặt. Vui lòng:\n- Đảm bảo ánh sáng tốt\n- Mặt rõ ràng, không bị che khuất\n- Thử lại';
+        } else if (status === 503 || status === 504) {
+            message = data.error || '❌ Dịch vụ xác thực khuôn mặt đang tạm thời quá tải, vui lòng thử lại sau ít phút.';
         } else if (data.error) {
             message = `❌ ${data.error}`;
         }
