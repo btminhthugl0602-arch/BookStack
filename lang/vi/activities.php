@@ -6,7 +6,7 @@
 return [
 
     // Pages
-    'page_create'                 => 'đã tạo trang',
+    'page_create'                 => 'đã tạo báo cáo mới',
     'page_create_notification'    => 'Trang đã được tạo thành công',
     'page_update'                 => 'đã cập nhật trang',
     'page_update_notification'    => 'Trang đã được cập nhật thành công',
@@ -18,7 +18,7 @@ return [
     'page_move_notification'      => 'Đã di chuyển trang thành công',
 
     // Chapters
-    'chapter_create'              => 'đã tạo chương',
+    'chapter_create'              => 'đã tạo hạng mục',
     'chapter_create_notification' => 'Chương đã được tạo thành công',
     'chapter_update'              => 'đã cập nhật chương',
     'chapter_update_notification' => 'Chương đã được cập nhật thành công',
@@ -28,7 +28,7 @@ return [
     'chapter_move_notification' => 'Đã chuyển chương thành công',
 
     // Books
-    'book_create'                 => 'đã tạo sách',
+    'book_create'                 => 'đã tạo dự án',
     'book_create_notification'    => 'Sách đã được tạo thành công',
     'book_create_from_chapter'              => 'chuyển chương thành sách',
     'book_create_from_chapter_notification' => 'Chuyển chương thành sách thành công',
@@ -140,6 +140,6 @@ return [
 
     'book_member_added' => 'đã thêm :detail vào dự án',
     'book_member_removed' => 'đã xóa thành viên :detail ra khỏi dự án',
-    'entity_approved' => 'đã duyệt nội dung :detail',
+    'entity_approved' => 'đã duyệt nội dung',
 
 ];
