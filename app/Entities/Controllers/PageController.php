@@ -227,46 +227,49 @@ class PageController extends Controller
      * Show the delete page view.
      */
     public function showDelete(string $bookSlug, string $pageSlug)
-    {
-        // 1. Tìm trang theo Slug
-        $page = $this->pageRepo->getBySlug($bookSlug, $pageSlug);
-        
-        // 2. Kiểm tra quyền xóa
+{
+    $page = $this->pageRepo->getBySlug($bookSlug, $pageSlug);
+    $book = $page->book;
+    $user = auth()->user();
+
+    $isAdmin = $user->hasSystemRole('admin');
+    $isBookOwner = (int)$user->id === (int)$book->owned_by;
+    $isAuthor = (int)$user->id === (int)$page->created_by;
+
+    if (!$isAdmin && !$isBookOwner && !$isAuthor) {
         $this->checkOwnablePermission('page-delete', $page);
-
-        // 3. THÊM DÒNG NÀY: Khai báo biến usedAsTemplate để tránh lỗi Undefined variable
-        // Mặc định để là 0 (coi như không dùng làm template) để an toàn nhất
-        $usedAsTemplate = 0; 
-
-        // 4. Trả về giao diện kèm đầy đủ biến
-        return view('pages.delete', [
-            'book' => $page->book,
-            'page' => $page,
-            'usedAsTemplate' => $usedAsTemplate, // <--- QUAN TRỌNG
-        ]);
     }
+
+    return view('pages.delete', [
+        'book' => $book,
+        'page' => $page,
+        'usedAsTemplate' => 0,
+    ]);
+}
     /**
      * Remove the specified page from storage.
      * Xóa trang khỏi hệ thống.
      */
-    public function destroy(string $bookSlug, string $pageSlug)
-    {
-        // 1. Dùng hàm getBySlug từ PageRepo (cái mà bạn đã sửa ở file kia)
-        // Code cũ của bạn dùng $this->queries->findVisibleBySlugOrFail($pageSlug) bị thiếu tham số $bookSlug nên gây lỗi.
-        $page = $this->pageRepo->getBySlug($bookSlug, $pageSlug);
+   public function destroy(string $bookSlug, string $pageSlug)
+{
+    // 1. Tìm trang
+    $page = $this->pageRepo->getBySlug($bookSlug, $pageSlug);
+    $book = $page->book;
+    $user = auth()->user();
 
-        // 2. Kiểm tra quyền (Logic chặn xóa nếu không phải chủ Book)
-        // Mình giữ lại logic kiểm tra quyền riêng của bạn ở đây
-        $book = $page->book; 
-        if (auth()->id() != $book->owned_by && !auth()->user()->hasSystemRole('admin')) {
-             // Nếu không phải admin và không phải chủ sách thì chặn
-             $this->checkOwnablePermission('page-delete', $page); 
-        }
+    // 2. Định nghĩa các điều kiện cho phép xóa
+    $isAdmin = $user->hasSystemRole('admin');
+    $isBookOwner = (int)$user->id === (int)$book->owned_by; // Chủ dự án (Cuốn sách)
+    $isAuthor = (int)$user->id === (int)$page->created_by;   // Người đăng bài (Tác giả)
 
-        // 3. Thực hiện xóa
-        $this->pageRepo->destroy($page);
-
-        // 4. Quay về trang chủ của cuốn sách
-        return redirect($page->book->getUrl());
+    // 3. Logic kiểm tra: Nếu KHÔNG thuộc 1 trong 3 nhóm trên thì mới check quyền Role hệ thống
+    if (!$isAdmin && !$isBookOwner && !$isAuthor) {
+        $this->checkOwnablePermission('page-delete', $page);
     }
+
+    // 4. Thực hiện xóa
+    $this->pageRepo->destroy($page);
+
+    return redirect($book->getUrl());
+}
 }
