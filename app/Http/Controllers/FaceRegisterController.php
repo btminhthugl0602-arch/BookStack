@@ -16,6 +16,8 @@ class FaceRegisterController extends BaseController
 
     public function register(Request $request)
     {
+        $this->extendExecutionTime();
+
         $user = Auth::user();
         $user = $user ? $user->fresh() : User::find(Auth::id());
         $image = $request->file('image');
@@ -182,6 +184,8 @@ class FaceRegisterController extends BaseController
 
     public function delete(Request $request)
     {
+        $this->extendExecutionTime();
+
         $user = Auth::user();
         $user = $user ? $user->fresh() : User::find(Auth::id());
 
@@ -227,6 +231,8 @@ class FaceRegisterController extends BaseController
 
     public function verify(Request $request)
     {
+        $this->extendExecutionTime();
+
         $user = Auth::user();
         $user = $user ? $user->fresh() : User::find(Auth::id());
         $image = $request->file('image');
@@ -349,6 +355,13 @@ class FaceRegisterController extends BaseController
         $attempts = max(1, (int) env('FACEPP_RETRY_ATTEMPTS', 2));
         $sleepMs = max(0, (int) env('FACEPP_RETRY_SLEEP_MS', 800));
 
+        $maxExecutionTime = (int) ini_get('max_execution_time');
+        if ($maxExecutionTime > 0) {
+            $safeTimeout = max(8, $maxExecutionTime - 8);
+            $timeout = min($timeout, $safeTimeout);
+            $connectTimeout = min($connectTimeout, max(3, $timeout - 3));
+        }
+
         $lastError = null;
 
         for ($attempt = 1; $attempt <= $attempts; $attempt++) {
@@ -385,5 +398,16 @@ class FaceRegisterController extends BaseController
         $path = ltrim($path, '/');
 
         return $baseUrl . '/facepp/v3/' . $path;
+    }
+
+    private function extendExecutionTime(): void
+    {
+        $targetSeconds = max(60, (int) env('FACE_FLOW_MAX_EXECUTION_TIME', 120));
+
+        if (function_exists('set_time_limit')) {
+            @set_time_limit($targetSeconds);
+        }
+
+        @ini_set('max_execution_time', (string) $targetSeconds);
     }
 }

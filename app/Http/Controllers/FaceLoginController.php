@@ -13,6 +13,8 @@ class FaceLoginController extends BaseController
 {
     public function login(Request $request)
     {
+        $this->extendExecutionTime();
+
         $image = $request->file('image');
 
         if (!$image) {
@@ -27,17 +29,12 @@ class FaceLoginController extends BaseController
 
         try {
             // 1. DETECT FACES (timeout: 45s)
-            $detectResponse = Http::timeout(45)->asMultipart()->post(
-                'https://api-us.faceplusplus.com/facepp/v3/detect',
-                [
-                    'api_key' => config('services.facepp.key'),
-                    'api_secret' => config('services.facepp.secret'),
-                    'image_file' => fopen($image->getPathname(), 'r'),
-                    'return_landmark' => 1,
-                ]
-            );
-
-            $detect = $detectResponse->json();
+            $detect = $this->faceppRequest('detect', [
+                'api_key' => config('services.facepp.key'),
+                'api_secret' => config('services.facepp.secret'),
+                'image_file' => fopen($image->getPathname(), 'r'),
+                'return_landmark' => 1,
+            ], true);
 
             // Check for Face++ API errors
             if (isset($detect['error_message'])) {
@@ -56,18 +53,13 @@ class FaceLoginController extends BaseController
             \Log::info('Face detected', ['faces_count' => count($detect['faces'])]);
 
             // 2. SEARCH IN FACESET (timeout: 45s)
-            $searchResponse = Http::timeout(45)->asMultipart()->post(
-                'https://api-us.faceplusplus.com/facepp/v3/search',
-                [
-                    'api_key' => config('services.facepp.key'),
-                    'api_secret' => config('services.facepp.secret'),
-                    'faceset_token' => config('services.facepp.faceset'),
-                    'face_token' => $faceToken,
-                    'return_result_count' => 5,
-                ]
-            );
-
-            $search = $searchResponse->json();
+            $search = $this->faceppRequest('search', [
+                'api_key' => config('services.facepp.key'),
+                'api_secret' => config('services.facepp.secret'),
+                'faceset_token' => config('services.facepp.faceset'),
+                'face_token' => $faceToken,
+                'return_result_count' => 5,
+            ]);
 
             // Check for Face++ API errors
             if (isset($search['error_message'])) {
@@ -146,5 +138,68 @@ class FaceLoginController extends BaseController
                 'error' => 'Server error while logging in with face data'
             ], 500);
         }
+    }
+
+    private function faceppRequest(string $path, array $payload, bool $multipart = false): array
+    {
+        $timeout = max(10, (int) env('FACEPP_TIMEOUT', 90));
+        $connectTimeout = max(5, (int) env('FACEPP_CONNECT_TIMEOUT', 30));
+        $attempts = max(1, (int) env('FACEPP_RETRY_ATTEMPTS', 2));
+        $sleepMs = max(0, (int) env('FACEPP_RETRY_SLEEP_MS', 800));
+
+        $maxExecutionTime = (int) ini_get('max_execution_time');
+        if ($maxExecutionTime > 0) {
+            $safeTimeout = max(8, $maxExecutionTime - 8);
+            $timeout = min($timeout, $safeTimeout);
+            $connectTimeout = min($connectTimeout, max(3, $timeout - 3));
+        }
+
+        $lastError = null;
+
+        for ($attempt = 1; $attempt <= $attempts; $attempt++) {
+            try {
+                $request = Http::connectTimeout($connectTimeout)->timeout($timeout);
+                $request = $multipart ? $request->asMultipart() : $request->asForm();
+
+                $response = $request->post($this->faceppUrl($path), $payload);
+                $data = $response->json();
+
+                return is_array($data) ? $data : [];
+            } catch (ConnectionException $e) {
+                $lastError = $e;
+
+                \Log::warning('Face++ login connection timeout', [
+                    'path' => $path,
+                    'attempt' => $attempt,
+                    'attempts' => $attempts,
+                    'error' => $e->getMessage(),
+                ]);
+
+                if ($attempt < $attempts && $sleepMs > 0) {
+                    usleep($sleepMs * 1000);
+                }
+            }
+        }
+
+        throw $lastError ?? new ConnectionException('Face++ request failed');
+    }
+
+    private function faceppUrl(string $path): string
+    {
+        $baseUrl = rtrim((string) env('FACEPP_BASE_URL', 'https://api-us.faceplusplus.com'), '/');
+        $path = ltrim($path, '/');
+
+        return $baseUrl . '/facepp/v3/' . $path;
+    }
+
+    private function extendExecutionTime(): void
+    {
+        $targetSeconds = max(60, (int) env('FACE_FLOW_MAX_EXECUTION_TIME', 120));
+
+        if (function_exists('set_time_limit')) {
+            @set_time_limit($targetSeconds);
+        }
+
+        @ini_set('max_execution_time', (string) $targetSeconds);
     }
 }
