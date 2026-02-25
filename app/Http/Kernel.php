@@ -27,7 +27,7 @@ class Kernel extends HttpKernel
      */
     protected $middlewareGroups = [
         'web' => [
-            \BookStack\Http\Middleware\ApplyCspRules::class,
+            
             \BookStack\Http\Middleware\EncryptCookies::class,
             \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
             \BookStack\Http\Middleware\StartSessionExtended::class,

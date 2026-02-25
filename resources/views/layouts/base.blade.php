@@ -68,9 +68,7 @@
         </div>
     </div>
 
-    @if($cspNonce ?? false)
-        <script src="{{ versioned_asset('dist/app.js') }}" type="module" nonce="{{ $cspNonce }}"></script>
-    @endif
+    <script src="{{ versioned_asset('dist/app.js') }}" type="module" @if(isset($cspNonce) && $cspNonce) nonce="{{ $cspNonce }}" @endif></script>
     @stack('body-end')
 
     @include('layouts.parts.base-body-end')

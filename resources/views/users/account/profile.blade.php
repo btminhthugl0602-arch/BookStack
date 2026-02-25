@@ -75,6 +75,45 @@
         </form>
     </section>
 
+    <section class="card content-wrap auto-height">
+        <div class="flex-container-row gap-l items-center wrap">
+            <div class="flex">
+                <h2 class="list-heading">Xác thực khuôn mặt</h2>
+                <p class="text-small mb-none">Chụp khuôn mặt để cập nhật hoặc xóa. Hệ thống sẽ xác thực trước khi thực hiện.</p>
+                @if(user()->face_token)
+                    <p class="text-small text-success">Khuôn mặt của bạn đã được đăng ký.</p>
+                @else
+                    <p class="text-small text-muted">Bạn chưa có dữ liệu khuôn mặt. Hãy cập nhật để bật đăng nhập bằng khuôn mặt.</p>
+                @endif
+            </div>
+            <div class="flex gap-s">
+                <button
+                    id="face-update-btn"
+                    type="button"
+                    class="button outline"
+                    data-has-face="{{ user()->face_token ? 'true' : 'false' }}">
+                    Cập nhật khuôn mặt
+                </button>
+                <button
+                    id="face-delete-btn"
+                    type="button"
+                    class="button outline negative">
+                    Xóa khuôn mặt
+                </button>
+            </div>
+        </div>
+
+        <video
+            id="face-register-video"
+            autoplay
+            muted
+            playsinline
+            style="width:100%; max-height: 400px; margin-top:10px; transform: scaleX(-1); display: none; border: 2px solid #ddd; border-radius: 4px; object-fit: cover;">
+        </video>
+        <canvas id="face-register-canvas" style="display:none;"></canvas>
+        <p id="face-status-text" class="text-small text-muted" style="margin-top:10px;"></p>
+    </section>
+
     @if(userCan(\BookStack\Permissions\Permission::UsersManage))
         <section class="card content-wrap auto-height">
             <div class="flex-container-row gap-l items-center wrap">
