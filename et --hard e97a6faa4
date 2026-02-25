@@ -1,0 +1,119 @@
+[33m3a5e69d32[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mTrục-chính[m[33m, [m[1;31morigin/Trục-chính[m[33m)[m Merge pull request #24 from btminhthugl0602-arch/vu
+[33mde8a1f14e[m[33m ([m[1;31morigin/vu[m[33m)[m last code
+[33me97a6faa4[m code mới nhất của kim oanh
+[33m47f069d06[m vu commit 24/2
+[33m073e672ab[m[33m ([m[1;31morigin/kim-oanh[m[33m)[m oanh sửa được lỗi xóa page và ở lịch sử
+[33mb2ffef099[m Merge pull request #22 from btminhthugl0602-arch/vhn
+[33m09ab1ddb5[m[33m ([m[1;31morigin/vhn[m[33m)[m fix thong bao duyet bai
+[33m70325abde[m Merge pull request #21 from btminhthugl0602-arch/Trục-chính
+[33m8afc08f17[m fix ngon ngu
+[33m173e58fdf[m[33m ([m[1;32mkim-oanh[m[33m)[m oanh Merge code về để sửa lại code cho hoàn thiện
+[33mda347d57e[m vu them phan sua xoa cho khuon amt
+[33m06cdc9b10[m[33m ([m[1;31morigin/MinhThu[m[33m, [m[1;32mMinhThu[m[33m)[m Nhúng AI: ok. Chưa có module thông báo của Nam
+[33m7d4fc7928[m Nhung AI va an nut them bao cao khi dang o page
+[33m497bd13e5[m[33m ([m[1;31morigin/Minh-Thư[m[33m)[m Merge branch 'Trục-chính' into Minh-Thư
+[33m3f186eb65[m[33m ([m[1;32mMinh-Thư[m[33m)[m ẩn nút thêm báo cáo khi đang ở trang báo cáo
+[33mdd52fb3b8[m Hoàn thiện AI tóm tắt tài liệu theo promt có sẵn
+[33m47959f29a[m xoá file thừa
+[33mbdd07922a[m thanh cong nhan dien khuon mat
+[33m51f9afb99[m vhn lấy code từ trục chính về
+[33m298139c6b[m vhn đưa code lên trục chính, hoàn thiện module thông báo và xử lý ngôn ngữ
+[33m73014c600[m vhn hoàn thiện code module xử lý thông báo và xử lý ngôn ngữ
+[33m173e29235[m Nhom truong merge code
+[33ma9651db81[m Update: Hoàn thiện Việt hóa
+[33mfc4e559c8[m Ẩn nút tạo hạng mục với nhân viên, chỉ leader được tạo hạng mục để giao việc
+[33m09bbc92bb[m Thư sửa tiếng Việt entities.php
+[33mdddd97a6d[m Vu lay code tu truc chinh
+[33ma2c8b6d8c[m Merge pull request #14 from btminhthugl0602-arch/Trục-chính
+[33mcd93ba99e[m code hoàn thiện phần phân quyền, duyệt bài và xử lý lỗi trên slidebar
+[33m93966f8b7[m sửa được lỗi sildebar
+[33m58b306f37[m Merge pull request #12 from btminhthugl0602-arch/Trục-chính
+[33md44ce9180[m oanh lay tu ban minhthu de chinh lai slidebar
+[33m5509eb3e7[m Co AI + Da chinh sua lai cach thuc phan quyen va dang bai duyet bai. Co loi logic ở thanh slidebar cần chỉnh sửa
+[33m9f698cb07[m Da xoay chuyen duoc hẹ thong theo huong phan quyen va duyet bai. Con chuc nang xoa bai dang bi loi
+[33m429532fec[m Delete database/migrations/2026_01_27_080816_create_notifications_table.php
+[33m6713e31be[m Merge branch 'vhn' of https://github.com/btminhthugl0602-arch/BookStack into vhn
+[33m505c35278[m up
+[33m01e8a8e6f[m Merge pull request #9 from btminhthugl0602-arch/Trục-chính
+[33m6dbe73591[m Thư lấy trục chính về
+[33mf7ee49a5a[m Oanh lấy nhánh trục chính về
+[33md94a40e3f[m Merge branch 'kim-oanh' into Trục-chính
+[33m741cff37b[m Merge pull request #6 from btminhthugl0602-arch/Minh-Thư
+[33m3d06b9f9d[m phiên bản sửa 1 của oanh
+[33m479d0de27[m Delete test2.php
+[33m005c09589[m Delete hnamtest.php
+[33m0a0c95e49[m fixed lang vi
+[33m0e4aa63df[m Đã nhúng được AI để đọc được tài liệu trong page
+[33m827778339[m Merge pull request #5 from btminhthugl0602-arch/vhn
+[33m8624ea951[m test
+[33m0d95b1b74[m Merge pull request #3 from btminhthugl0602-arch/vu
+[33m881bcc68e[m Merge branch 'Trục-chính' into vu
+[33m679ab48aa[m push truc chinh
+[33m5ef15fa38[m Merge branch 'vu' of https://github.com/btminhthugl0602-arch/PhatTrienBookStack into vu
+[33mbb9831749[m Merge pull request #4 from btminhthugl0602-arch/kim-oanh
+[33m7748a7320[m kimoanh test thu
+[33m596d06375[m Merge branch 'BookStackApp:development' into Trục-chính
+[33m81d081226[m test 3 commit and push
+[33m908fa7e15[m push vu
+[33m30425a47b[m oanh
+[33m1c3cb242f[m vu push truc chinh 2
+[33md88705b04[m vu push truc chinh
+[33m6438709b6[m oanh xoa dong 28
+[33me93eff23c[m Merge pull request #2 from trlynhcuti/hnam
+[33m468b7dafa[m test
+[33m66a08021c[m vuhup10tr
+[33mfe9f041da[m quangvutrucchinh
+[33m134f8feb1[m Merge branch 'development' into vu
+[33mfe88dcc26[m oanh test
+[33m59eb5f8d5[m robot test 2
+[33mc492a616f[m vuhup1tr
+[33mb1c6e82a4[m[33m ([m[1;32mdevelopment[m[33m)[m thu test
+[33m671cd0546[m vu test 2
+[33m01d30504a[m vu test
+[33m20db37259[m Merge branch 'development' of github.com:BookStackApp/BookStack into development
+[33m43eed1660[m Meta: Updated dev version, license year, crowdin config
+[33me6b754fad[m[33m ([m[1;32mVu[m[33m)[m Merge pull request #5969 from shaoliang123456/fix/git-safe-directory-in-docker
+[33m018de5def[m fix: Configure safe directory for git in dockerfile
+[33m5c4fc3dc2[m fix: Docker: Add git safe.directory config for bind-mounted repos.Mark  /app as safe directory to handle Git 2.35+ ownership  checks in Docker containers.
+[33m07ec880e3[m Testing: Updated search tests to consider new limits
+[33mab436ed5c[m Updated translations with latest Crowdin changes (#5962)
+[33m082befb2f[m Updated PHP packages and translators pre v25.12.1
+[33mb0a8cb0c5[m Merge pull request #5968 from BookStackApp/limits
+[33mb08d1b36d[m Search: Set limits on the amount of search terms
+[33m88d86df66[m ZIP Exports: Added limit to ZIP file size before extraction
+[33m38d369724[m Updated translations with latest Crowdin changes (#5933)
+[33md93354ff0[m Updated licenses and translation attribution pre v25.12
+[33m3336e0c6a[m Deps: Updated PHP packages via composer
+[33m8fc9a2af4[m Lexical API: Updated docs to reflect public event usage
+[33m8aec57112[m Mentions: Fixed some users not showing in mention selector
+[33m382f4db27[m Merge pull request #5956 from BookStackApp/system_cli_update_dec25
+[33md504b1914[m System CLI: Update to v0.4
+[33md87e8d05c[m Merge pull request #5939 from BookStackApp/lexical_fixes_2512
+[33m0b4836178[m Search: Fixed pagination not considering sub-paths
+[33m2de3247ae[m Deps: Updated PHP package versions
+[33m48df2be0d[m DB: Added views->viewable_type index
+[33ma4c055655[m Merge pull request #5952 from gerundt/iis-module-link
+[33ma941d1b40[m Comment mentions: Fixed CI and test scenarios
+[33m51f9b63db[m Comment Mentions: Fixed and tweaks during review of changes
+[33m90fc02c57[m Esbuild & Mentions: Updated interaction stability and build system
+[33m4aeb57112[m Update "Microsoft URL Rewrite Module for IIS" download link
+[33m3d9aba7b1[m Mentions: Added coverage for mentions search endpoint
+[33m48cdaab69[m Comment Mentions: Added tests to cover back-end functionality
+[33m4f760479c[m Merge branch 'development' into comment_mentions
+[33m9211062e8[m Merge pull request #5919 from BookStackApp/v25-11
+[33m221c6c7e9[m Comment Mentions: Added core back-end logic
+[33me2f91c2bb[m Comment Mentions: Added keyboard nav, worked on design
+[33m147ff00c7[m JS: Swapped livereload lib for esbuild livereload setup
+[33m1e768ce33[m Lexical: Changed mention to be a decorator node
+[33m313326b32[m Updated translator & dependency attribution before release v25.11.6
+[33m1d87b513b[m Deps: Updated PHP package versions
+[33m9bf9ae9c3[m Mentions: Added new endpoint, Built editor list display
+[33m50540e23a[m Lexical: Created mention node, started mention service, split comment editor out
+[33m3e1b0587e[m Lexical: Fixed undefined entity selector value
+[33m6661ae817[m Lexical: Improved focus control for popup modal forms
+[33m1ee571143[m Pagination: Fixed lack of responsiveness causing overflow
+[33m08e7ba706[m Images: Made resize errors log with error detail
+[33m34e747162[m Testing: Fixed some incorrect test case names
+[33m10f5ceee3[m List page settings: Review of #5606
+[33m9886bbd3a[m Merge branch 'feature/pagination_settings' of github.com:Xenoamor/BookStack into Xenoamor-feature/pagination_settings
+[33m92a3c22b4[m Merge pull request #5928 from BookStackApp/lexical_dev_a
